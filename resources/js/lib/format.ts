@@ -23,6 +23,32 @@ export function formatDate(value: string | null | undefined): string {
     return new Date(value).toLocaleString('pt-BR');
 }
 
+/**
+ * Brazilian phone mask. Accepts whatever the user types and returns a
+ * formatted view limited to 11 digits.
+ *
+ *   "" → ""
+ *   "3" → "(3"
+ *   "35" → "(35) "
+ *   "35991" → "(35) 991"
+ *   "3599180" → "(35) 9180-"  (10 digit fallback while typing)
+ *   "35991803209" → "(35) 99180-3209"
+ */
+export function formatPhoneMask(raw: string): string {
+    const digits = (raw || '').replace(/\D+/g, '').slice(0, 11);
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) {
+        return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+export function phoneDigits(raw: string | null | undefined): string {
+    return (raw || '').replace(/\D+/g, '');
+}
+
 export const STATUS_LABELS: Record<string, string> = {
     queued: 'Na fila',
     resolving: 'Identificando',

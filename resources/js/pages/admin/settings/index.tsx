@@ -289,7 +289,9 @@ function MailForm({ initial }: { initial: Props['mail'] }) {
                             value={form.data.driver}
                             onChange={(e) => form.setData('driver', e.target.value)}
                         >
-                            <option value="log">log (dev)</option>
+                            <option value="log">log (apenas escreve no log, não envia)</option>
+                            <option value="sendmail">sendmail (PHP nativo)</option>
+                            <option value="smtp">smtp</option>
                             <option value="resend">resend</option>
                         </select>
                     </Field>

@@ -168,7 +168,7 @@ class SettingsController extends Controller
     public function updateMail(Request $request, MailSettings $settings): RedirectResponse
     {
         $data = $request->validate([
-            'driver' => ['required', 'in:log,resend'],
+            'driver' => ['required', 'in:log,smtp,sendmail,resend'],
             'resend_api_key' => ['nullable', 'string'],
             'from_address' => ['required', 'email'],
             'from_name' => ['required', 'string', 'max:120'],

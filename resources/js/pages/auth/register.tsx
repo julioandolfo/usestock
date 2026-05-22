@@ -8,11 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
+import { formatPhoneMask } from '@/lib/format';
 
 interface RegisterForm {
     [key: string]: string;
     name: string;
     email: string;
+    phone: string;
     password: string;
     password_confirmation: string;
 }
@@ -21,6 +23,7 @@ export default function Register() {
     const { data, setData, post, processing, errors, reset } = useForm<RegisterForm>({
         name: '',
         email: '',
+        phone: '',
         password: '',
         password_confirmation: '',
     });
@@ -71,12 +74,28 @@ export default function Register() {
                     </div>
 
                     <div className="grid gap-2">
+                        <Label htmlFor="phone">WhatsApp</Label>
+                        <Input
+                            id="phone"
+                            type="tel"
+                            inputMode="tel"
+                            tabIndex={3}
+                            autoComplete="tel"
+                            value={data.phone}
+                            onChange={(e) => setData('phone', formatPhoneMask(e.target.value))}
+                            disabled={processing}
+                            placeholder="(35) 99180-3209"
+                        />
+                        <InputError message={errors.phone} />
+                    </div>
+
+                    <div className="grid gap-2">
                         <Label htmlFor="password">Senha</Label>
                         <Input
                             id="password"
                             type="password"
                             required
-                            tabIndex={3}
+                            tabIndex={4}
                             autoComplete="new-password"
                             value={data.password}
                             onChange={(e) => setData('password', e.target.value)}
@@ -92,7 +111,7 @@ export default function Register() {
                             id="password_confirmation"
                             type="password"
                             required
-                            tabIndex={4}
+                            tabIndex={5}
                             autoComplete="new-password"
                             value={data.password_confirmation}
                             onChange={(e) => setData('password_confirmation', e.target.value)}
@@ -102,7 +121,7 @@ export default function Register() {
                         <InputError message={errors.password_confirmation} />
                     </div>
 
-                    <Button type="submit" className="mt-2 w-full" tabIndex={5} disabled={processing}>
+                    <Button type="submit" className="mt-2 w-full" tabIndex={6} disabled={processing}>
                         {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
                         Criar conta
                     </Button>
@@ -110,7 +129,7 @@ export default function Register() {
 
                 <div className="text-muted-foreground text-center text-sm">
                     Já tem uma conta?{' '}
-                    <TextLink href={route('login')} tabIndex={6}>
+                    <TextLink href={route('login')} tabIndex={7}>
                         Entrar
                     </TextLink>
                 </div>
