@@ -73,7 +73,7 @@ RUN composer install \
 # =====================================================================
 FROM php-base AS runtime
 
-RUN apk add --no-cache nginx supervisor tini tzdata \
+RUN apk add --no-cache nginx supervisor tini tzdata bind-tools \
     && rm -rf /tmp/* /var/cache/apk/*
 
 ENV TZ=America/Sao_Paulo
