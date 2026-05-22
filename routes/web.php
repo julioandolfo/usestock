@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\PricingRuleController;
 use App\Http\Controllers\Admin\ProviderController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\User\BatchController;
 use App\Http\Controllers\User\DownloadController;
@@ -21,7 +22,7 @@ use Inertia\Inertia;
 // -------------------------------------------------------------------
 // Public / pre-install
 // -------------------------------------------------------------------
-Route::get('/', fn () => Inertia::render('welcome'))->name('home');
+Route::get('/', HomeController::class)->name('home');
 
 Route::middleware('not_installed')->group(function () {
     Route::get('/install', [InstallController::class, 'show'])->name('install.show');
@@ -41,7 +42,7 @@ Route::post('/webhooks/mercadopago', MercadoPagoWebhookController::class)
 // -------------------------------------------------------------------
 // Authenticated user area
 // -------------------------------------------------------------------
-Route::middleware(['auth', 'verified', 'installed'])->group(function () {
+Route::middleware(['auth', 'installed'])->group(function () {
     Route::get('/dashboard', fn () => Inertia::render('dashboard'))->name('dashboard');
 
     Route::get('/downloads', [DownloadController::class, 'index'])->name('downloads.index');
@@ -67,7 +68,7 @@ Route::middleware(['auth', 'verified', 'installed'])->group(function () {
 // -------------------------------------------------------------------
 // Admin area
 // -------------------------------------------------------------------
-Route::middleware(['auth', 'verified', 'installed', 'role:admin'])
+Route::middleware(['auth', 'installed', 'role:admin'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
