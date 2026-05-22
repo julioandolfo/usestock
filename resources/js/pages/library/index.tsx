@@ -19,7 +19,7 @@ export default function LibraryIndex({ items }: { items: { data: LibraryItem[] }
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Biblioteca" />
-            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 sm:grid-cols-2 lg:grid-cols-4">
                 {items.data.length === 0 && (
                     <p className="col-span-full text-sm text-muted-foreground">
                         Nenhum arquivo disponível ainda.

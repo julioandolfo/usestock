@@ -46,7 +46,7 @@ export default function AdminDashboard({ metrics, upstream, topProviders, recent
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Admin · Visão geral" />
             <div className="grid gap-4 p-4">
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-3 grid-cols-2 sm:gap-4 lg:grid-cols-4">
                     <Stat title="Saldo GetStocks" value={upstream.balance?.bValue ?? '—'} subtitle={upstream.error ?? 'Atualizado agora'} />
                     <Stat title="Downloads hoje" value={formatNumber(metrics.downloads_today)} subtitle={`${metrics.downloads_failed_today} falhou(aram)`} />
                     <Stat title="Receita do mês" value={formatBRL(metrics.revenue_month_cents)} subtitle="Pagamentos aprovados" />

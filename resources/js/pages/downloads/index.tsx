@@ -120,7 +120,7 @@ export default function DownloadsIndex({ downloads }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Downloads" />
-            <div className="grid gap-6 p-4 lg:grid-cols-3">
+            <div className="grid gap-4 p-3 sm:gap-6 sm:p-4 lg:grid-cols-3">
                 <Card className="lg:col-span-1">
                     <CardHeader>
                         <CardTitle>Novo download</CardTitle>

@@ -73,7 +73,7 @@ export default function ProvidersIndex({ groups, filters, lastSyncAt, totalProvi
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Bancos / Provedores" />
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
                 <Card>
                     <CardHeader>
                         <div className="flex flex-wrap items-center justify-between gap-3">
