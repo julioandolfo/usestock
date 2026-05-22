@@ -55,6 +55,12 @@ class FileServeController extends Controller
 
         $filename = $download->file_name ?: ($download->public_id.($download->file_extension ? '.'.$download->file_extension : ''));
 
+        // Bump the per-file counter so the UI can show "Baixar (Nx)".
+        $download->forceFill([
+            'served_count' => $download->served_count + 1,
+            'last_served_at' => now(),
+        ])->saveQuietly();
+
         $response = new BinaryFileResponse($absolutePath, 200, [
             'Content-Type' => $this->guessContentType($download->file_extension),
             'Content-Length' => (string) $size,

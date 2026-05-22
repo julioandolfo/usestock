@@ -27,6 +27,7 @@ type Item = {
     provider_slug: string | null;
     status: string;
     file_size_bytes: number | null;
+    served_count: number;
 };
 
 type Props = { batch: Batch; items: Item[] };
@@ -118,10 +119,15 @@ export default function BatchShow({ batch, items: initial }: Props) {
                                             {d.status === 'ready' && (
                                                 <a
                                                     href={route('library.file', d.public_id)}
-                                                    className="text-xs text-primary hover:underline"
+                                                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                                                     download
                                                 >
                                                     Baixar
+                                                    {d.served_count > 0 && (
+                                                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                                                            {d.served_count}×
+                                                        </span>
+                                                    )}
                                                 </a>
                                             )}
                                         </TableCell>

@@ -22,6 +22,8 @@ type Download = {
     expires_at: string | null;
     upstream_thumb_url: string | null;
     credits_charged: number;
+    served_count: number;
+    last_served_at: string | null;
 };
 
 export default function DownloadShow({ download }: { download: Download }) {
@@ -92,11 +94,24 @@ export default function DownloadShow({ download }: { download: Download }) {
                     </CardHeader>
                     <CardContent className="space-y-3">
                         {state.status === 'ready' ? (
-                            <Button asChild className="w-full">
-                                <a href={route('library.file', state.public_id)} download>
-                                    Baixar arquivo
-                                </a>
-                            </Button>
+                            <>
+                                <Button asChild className="w-full">
+                                    <a href={route('library.file', state.public_id)} download>
+                                        Baixar arquivo
+                                        {state.served_count > 0 && (
+                                            <span className="ml-2 rounded-full bg-primary-foreground/20 px-2 py-0.5 text-[10px] font-semibold tabular-nums">
+                                                {state.served_count}×
+                                            </span>
+                                        )}
+                                    </a>
+                                </Button>
+                                {state.served_count > 0 && (
+                                    <p className="text-center text-[10px] text-muted-foreground">
+                                        Você já baixou este arquivo {state.served_count}{' '}
+                                        {state.served_count === 1 ? 'vez' : 'vezes'}
+                                    </p>
+                                )}
+                            </>
                         ) : (
                             <p className="text-sm text-muted-foreground">
                                 Aguardando processamento. O botão de download aparece automaticamente.
