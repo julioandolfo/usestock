@@ -53,7 +53,7 @@ export default function DownloadShow({ download }: { download: Download }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={state.item_name || `Download ${state.public_id}`} />
-            <div className="grid gap-4 p-4 lg:grid-cols-3">
+            <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader>
                         <div className="flex items-start justify-between gap-3">

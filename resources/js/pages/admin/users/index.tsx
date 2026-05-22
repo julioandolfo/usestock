@@ -44,7 +44,7 @@ export default function UsersIndex({ users, filters }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Usuários" />
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between gap-3">

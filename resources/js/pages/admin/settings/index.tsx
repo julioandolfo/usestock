@@ -62,7 +62,7 @@ export default function SettingsIndex(props: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Configurações" />
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
                 <Tabs defaultValue="general">
                     <TabsList>
                         <TabsTrigger value="general">Geral</TabsTrigger>

@@ -27,7 +27,7 @@ export default function AuditIndex({ logs }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Auditoria" />
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle>Auditoria</CardTitle>

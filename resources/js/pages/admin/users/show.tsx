@@ -62,7 +62,7 @@ export default function UserShow({ user, transactions, downloads }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={user.name} />
-            <div className="grid gap-4 p-4 lg:grid-cols-3">
+            <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-3">
                 <Card className="lg:col-span-1">
                     <CardHeader>
                         <CardTitle>{user.name}</CardTitle>
