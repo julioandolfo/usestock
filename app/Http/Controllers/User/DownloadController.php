@@ -61,11 +61,15 @@ class DownloadController extends Controller
             throw ValidationException::withMessages(['links' => $e->getMessage()]);
         }
 
-        $msg = "Lote #{$result['batch']->public_id} enfileirado com ".count($result['items']).' item(s)';
-        if ($result['reused'] > 0) {
-            $msg .= " ({$result['reused']} reaproveitado(s) sem cobrança)";
-        }
+        $total = count($result['items']);
+        $reused = $result['reused'];
+        $queued = $total - $reused;
 
-        return back()->with('status', $msg);
+        return back()->with('lastSubmit', [
+            'batch_id' => $result['batch']->public_id,
+            'total' => $total,
+            'queued' => $queued,
+            'reused' => $reused,
+        ]);
     }
 }
