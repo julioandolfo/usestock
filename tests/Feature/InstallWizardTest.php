@@ -20,9 +20,9 @@ it('runs the wizard end-to-end and creates the admin', function () {
     $g->save();
 
     Http::fake([
-        '*/api/auth/login*' => Http::response([
+        '*/api/auth/profile*' => Http::response([
             'status' => 200,
-            'result' => ['access_token' => 'tok', 'token_type' => 'bearer'],
+            'result' => ['Profile' => ['id' => 1, 'name' => 'Demo', 'email' => 'demo@demo.com']],
         ], 200),
     ]);
 
@@ -34,7 +34,7 @@ it('runs the wizard end-to-end and creates the admin', function () {
         'brand_name' => 'TestStock',
         'support_email' => 'support@example.com',
         'getstocks_email' => 'demo@demo.com',
-        'getstocks_password' => 'pwd',
+        'getstocks_token' => 'a-valid-getstocks-access-token-from-email',
     ]);
 
     $response->assertRedirect(route('login'));
@@ -42,17 +42,20 @@ it('runs the wizard end-to-end and creates the admin', function () {
     $admin = User::where('email', 'admin@example.com')->first();
     expect($admin)->not->toBeNull();
     expect($admin->hasRole('admin'))->toBeTrue();
+    app()->forgetInstance(GeneralSettings::class);
+    app()->forgetInstance(GetStocksSettings::class);
     expect(app(GeneralSettings::class)->installed)->toBeTrue();
-    expect(app(GetStocksSettings::class)->token)->toBe('tok');
+    expect(app(GetStocksSettings::class)->token)->toBe('a-valid-getstocks-access-token-from-email');
 });
 
-it('does not install if GetStocks login fails', function () {
+it('does not install if the GetStocks token is invalid', function () {
     /** @var GeneralSettings $g */
     $g = app(GeneralSettings::class);
     $g->installed = false;
     $g->save();
 
     Http::fake([
+        '*/api/auth/profile*' => Http::response(['message' => 'Unauthenticated.'], 401),
         '*/api/auth/login*' => Http::response(['error' => true, 'data' => 'invalid creds'], 401),
     ]);
 
@@ -62,9 +65,12 @@ it('does not install if GetStocks login fails', function () {
         'admin_password' => 'password',
         'admin_password_confirmation' => 'password',
         'getstocks_email' => 'demo@demo.com',
-        'getstocks_password' => 'wrong',
-    ])->assertSessionHasErrors('getstocks_email');
+        'getstocks_token' => 'bad-token-that-will-be-rejected',
+    ])->assertSessionHasErrors('getstocks_token');
 
     expect(User::where('email', 'a@example.com')->exists())->toBeFalse();
+    app()->forgetInstance(GeneralSettings::class);
+    app()->forgetInstance(GetStocksSettings::class);
     expect(app(GeneralSettings::class)->installed)->toBeFalse();
+    expect(app(GetStocksSettings::class)->token)->toBeNull();
 });
