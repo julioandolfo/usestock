@@ -10,7 +10,7 @@ import AppLayout from '@/layouts/app-layout';
 import { formatBytes, formatNumber, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CheckCircle2, Coins, Download, FileArchive, Loader2, Sparkles, TrendingUp, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Coins, Download, Eye, FileArchive, Loader2, Sparkles, TrendingUp, Zap } from 'lucide-react';
 import { FormEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
@@ -23,6 +23,19 @@ type Stats = {
 };
 
 type Limits = { bulk_max_items: number; file_ttl_days: number; max_concurrent_per_user: number };
+
+type PreviewItem = {
+    link: string;
+    ok: boolean;
+    enabled?: boolean;
+    name?: string | null;
+    thumb?: string | null;
+    provider_name?: string | null;
+    type_label?: string | null;
+    is_premium?: boolean;
+    credits?: number | null;
+    error?: string;
+};
 
 type ProviderTypeRow = {
     type: string;
@@ -71,6 +84,8 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
     const [processing, setProcessing] = useState(false);
     const [errors, setErrors] = useState<{ links?: string }>({});
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    const [previewing, setPreviewing] = useState(false);
+    const [previewItems, setPreviewItems] = useState<PreviewItem[] | null>(null);
 
     const linkList = useMemo(
         () =>
@@ -118,6 +133,38 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
         });
     }, [recentDownloads]);
 
+    const fetchPreview = async () => {
+        if (!linkList.length || previewing) return;
+        setPreviewing(true);
+        setErrors({});
+        try {
+            const csrf = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+            const res = await fetch(route('downloads.preview'), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ links: linkList, is_premium: isPremium }),
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                setErrors({ links: body.message ?? 'Falha ao consultar os itens.' });
+                setPreviewItems(null);
+                return;
+            }
+            const data = (await res.json()) as { items: PreviewItem[] };
+            setPreviewItems(data.items);
+        } catch {
+            setErrors({ links: 'Falha de conexão ao consultar os itens.' });
+        } finally {
+            setPreviewing(false);
+        }
+    };
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (!linkList.length) return;
@@ -133,6 +180,7 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                 preserveState: true,
                 onSuccess: (page) => {
                     setBulkText('');
+                    setPreviewItems(null);
                     const submitInfo = (page.props as { flash?: { lastSubmit?: { total: number; queued: number; reused: number } } }).flash?.lastSubmit;
                     setSuccessMsg(buildSubmitMessage(submitInfo, n));
                     setTimeout(() => setSuccessMsg(null), 8000);
@@ -268,11 +316,41 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                     <Switch checked={wantZip} onCheckedChange={setWantZip} />
                                 </div>
 
-                                <Button type="submit" disabled={processing || !linkList.length} className="w-full">
-                                    <Zap className="mr-2 size-4" />
-                                    {processing ? 'Enfileirando…' : 'Iniciar download'}
-                                </Button>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={previewing || !linkList.length}
+                                        onClick={fetchPreview}
+                                    >
+                                        {previewing ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <Eye className="mr-2 size-4" />
+                                        )}
+                                        Conferir
+                                    </Button>
+                                    <Button type="submit" disabled={processing || !linkList.length}>
+                                        {processing ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <Zap className="mr-2 size-4" />
+                                        )}
+                                        {processing ? 'Enfileirando…' : 'Iniciar download'}
+                                    </Button>
+                                </div>
                             </form>
+
+                            {previewItems && previewItems.length > 0 && (
+                                <div className="mt-4 space-y-2 rounded-md border bg-muted/30 p-2">
+                                    <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                        Pré-visualização
+                                    </p>
+                                    {previewItems.map((p) => (
+                                        <PreviewCard key={p.link} item={p} />
+                                    ))}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -331,12 +409,13 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                                 <TableCell className="text-xs">{formatBytes(d.file_size_bytes)}</TableCell>
                                                 <TableCell>
                                                     {d.status === 'ready' ? (
-                                                        <Link
+                                                        <a
                                                             href={route('library.file', d.public_id)}
                                                             className="text-xs font-medium text-primary hover:underline"
+                                                            download
                                                         >
                                                             Baixar
-                                                        </Link>
+                                                        </a>
                                                     ) : (
                                                         <Link
                                                             href={route('downloads.show', d.public_id)}
@@ -465,4 +544,59 @@ function buildSubmitMessage(
         return `${queued} item${queued === 1 ? '' : 'ns'} enfileirado${queued === 1 ? '' : 's'} · ${reused} reaproveitado${reused === 1 ? '' : 's'} sem cobrança.`;
     }
     return `${total} link${total === 1 ? '' : 's'} enfileirado${total === 1 ? '' : 's'}. Acompanhe na atividade recente.`;
+}
+
+function PreviewCard({ item }: { item: PreviewItem }) {
+    if (!item.ok) {
+        return (
+            <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                <div className="min-w-0">
+                    <p className="truncate font-mono text-[10px] text-destructive/80">{item.link}</p>
+                    <p>{item.error ?? 'Falha ao consultar.'}</p>
+                </div>
+            </div>
+        );
+    }
+    return (
+        <div className="flex items-center gap-3 rounded border bg-background p-2">
+            <div className="size-16 shrink-0 overflow-hidden rounded bg-muted">
+                {item.thumb ? (
+                    <img src={item.thumb} alt={item.name ?? ''} className="size-full object-cover" />
+                ) : (
+                    <div className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                        sem prévia
+                    </div>
+                )}
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{item.name ?? item.link}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+                    {item.provider_name && (
+                        <span className="rounded-sm bg-muted px-1.5 py-0.5 font-medium capitalize">
+                            {item.provider_name}
+                        </span>
+                    )}
+                    {item.type_label && (
+                        <span className="rounded-sm bg-muted px-1.5 py-0.5">{item.type_label}</span>
+                    )}
+                    {item.is_premium && (
+                        <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-primary">Premium</span>
+                    )}
+                    {item.enabled === false && (
+                        <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 text-destructive">
+                            Tipo desabilitado
+                        </span>
+                    )}
+                </div>
+            </div>
+            <div className="shrink-0 text-right">
+                {item.credits !== null && item.credits !== undefined ? (
+                    <p className="text-sm font-semibold text-primary">{item.credits} créd.</p>
+                ) : (
+                    <p className="text-[10px] text-muted-foreground">custo a calcular</p>
+                )}
+            </div>
+        </div>
+    );
 }

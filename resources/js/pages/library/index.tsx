@@ -40,12 +40,13 @@ export default function LibraryIndex({ items }: { items: { data: LibraryItem[] }
                         </CardHeader>
                         <CardContent className="space-y-1 text-xs text-muted-foreground">
                             <p>{item.provider_slug}</p>
-                            <Link
+                            <a
                                 href={route('library.file', item.public_id)}
                                 className="font-medium text-primary hover:underline"
+                                download
                             >
                                 Baixar arquivo
-                            </Link>
+                            </a>
                         </CardContent>
                     </Card>
                 ))}
