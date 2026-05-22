@@ -9,7 +9,7 @@ import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-even
 import AppLayout from '@/layouts/app-layout';
 import { formatBytes, formatDate, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { FormEventHandler, useCallback, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Downloads', href: '/downloads' }];
@@ -39,11 +39,10 @@ export default function DownloadsIndex({ downloads }: Props) {
     const [bulkText, setBulkText] = useState('');
     const [items, setItems] = useState<Download[]>(downloads.data);
 
-    const { setData, post, processing, errors, reset } = useForm({
-        links: [] as string[],
-        is_premium: true as boolean,
-        zip: false as boolean,
-    });
+    const [isPremium, setIsPremium] = useState(true);
+    const [wantZip, setWantZip] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<{ links?: string }>({});
 
     const onEvent = useCallback((event: DownloadEvent) => {
         setItems((prev) => {
@@ -77,14 +76,18 @@ export default function DownloadsIndex({ downloads }: Props) {
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (!linkList.length) return;
-        setData('links', linkList);
-        post(route('downloads.store'), {
-            preserveScroll: true,
-            onSuccess: () => {
-                setBulkText('');
-                reset('links');
+        setProcessing(true);
+        setErrors({});
+        router.post(
+            route('downloads.store'),
+            { links: linkList, is_premium: isPremium, zip: wantZip },
+            {
+                preserveScroll: true,
+                onSuccess: () => setBulkText(''),
+                onError: (errs) => setErrors(errs as { links?: string }),
+                onFinish: () => setProcessing(false),
             },
-        });
+        );
     };
 
     return (
@@ -121,10 +124,7 @@ export default function DownloadsIndex({ downloads }: Props) {
                                     <p className="text-sm font-medium">Conteúdo premium</p>
                                     <p className="text-xs text-muted-foreground">Necessário para a maioria dos sites.</p>
                                 </div>
-                                <Switch
-                                    checked={true}
-                                    onCheckedChange={(v) => setData('is_premium', v)}
-                                />
+                                <Switch checked={isPremium} onCheckedChange={setIsPremium} />
                             </div>
 
                             <div className="flex items-center justify-between rounded-md border p-3">
@@ -132,7 +132,7 @@ export default function DownloadsIndex({ downloads }: Props) {
                                     <p className="text-sm font-medium">Gerar ZIP do lote</p>
                                     <p className="text-xs text-muted-foreground">Empacota tudo após os itens ficarem prontos.</p>
                                 </div>
-                                <Switch onCheckedChange={(v) => setData('zip', v)} />
+                                <Switch checked={wantZip} onCheckedChange={setWantZip} />
                             </div>
 
                             <Button type="submit" disabled={processing || !linkList.length} className="w-full">

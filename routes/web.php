@@ -85,6 +85,7 @@ Route::middleware(['auth', 'installed', 'role:admin'])
         Route::get('/providers', [ProviderController::class, 'index'])->name('providers.index');
         Route::patch('/providers/{provider}', [ProviderController::class, 'update'])->name('providers.update');
         Route::post('/providers/{provider}/price', [ProviderController::class, 'setPrice'])->name('providers.price');
+        Route::post('/providers/bulk/{slug}', [ProviderController::class, 'bulkUpdate'])->name('providers.bulk');
         Route::post('/providers/sync', [ProviderController::class, 'sync'])->name('providers.sync');
 
         Route::get('/pricing', [PricingRuleController::class, 'index'])->name('pricing.index');

@@ -7,6 +7,7 @@ use App\Models\DownloadRequest;
 use App\Models\Provider;
 use App\Services\Pricing\PricingResolver;
 use App\Settings\DownloadSettings;
+use App\Support\ProviderType;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -42,25 +43,39 @@ class DashboardController extends Controller
         $providers = Provider::query()
             ->where('enabled', true)
             ->orderBy('name')
+            ->orderBy('is_premium')
             ->get()
-            ->map(fn (Provider $p) => [
-                'id' => $p->id,
-                'slug' => $p->slug,
-                'name' => $p->name,
-                'host' => $p->host,
-                'type' => $p->type,
-                'resolution' => $p->resolution,
-                'is_premium' => $p->is_premium,
-                'credits' => $resolver->creditsFor($p),
-            ])
+            ->map(function (Provider $p) use ($resolver) {
+                $kind = ProviderType::describe($p->type);
+
+                return [
+                    'id' => $p->id,
+                    'slug' => $p->slug,
+                    'name' => $p->name,
+                    'host' => $p->host,
+                    'type' => $p->type,
+                    'kind' => $kind['kind'],
+                    'kind_label' => $kind['label'],
+                    'resolution' => $p->resolution,
+                    'is_premium' => $p->is_premium,
+                    'credits' => $resolver->creditsFor($p),
+                ];
+            })
             ->groupBy('slug')
             ->map(fn ($group) => [
                 'slug' => $group->first()['slug'],
                 'name' => $group->first()['name'],
                 'host' => $group->first()['host'],
-                'normal_credits' => $group->firstWhere('is_premium', false)['credits'] ?? null,
-                'premium_credits' => $group->firstWhere('is_premium', true)['credits'] ?? null,
-                'resolutions' => $group->pluck('resolution')->filter()->unique()->values(),
+                'types' => $group
+                    ->map(fn ($r) => [
+                        'type' => $r['type'],
+                        'kind' => $r['kind'],
+                        'kind_label' => $r['kind_label'],
+                        'resolution' => $r['resolution'],
+                        'is_premium' => $r['is_premium'],
+                        'credits' => $r['credits'],
+                    ])
+                    ->values(),
             ])
             ->values();
 

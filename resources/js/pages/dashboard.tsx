@@ -9,7 +9,7 @@ import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-even
 import AppLayout from '@/layouts/app-layout';
 import { formatBytes, formatNumber, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { CheckCircle2, Coins, Download, FileArchive, Sparkles, TrendingUp, Zap } from 'lucide-react';
 import { FormEventHandler, useCallback, useMemo, useState } from 'react';
 
@@ -24,13 +24,20 @@ type Stats = {
 
 type Limits = { bulk_max_items: number; file_ttl_days: number; max_concurrent_per_user: number };
 
+type ProviderTypeRow = {
+    type: string;
+    kind: string;
+    kind_label: string;
+    resolution: string | null;
+    is_premium: boolean;
+    credits: number;
+};
+
 type ProviderCard = {
     slug: string;
     name: string;
     host: string | null;
-    normal_credits: number | null;
-    premium_credits: number | null;
-    resolutions: string[];
+    types: ProviderTypeRow[];
 };
 
 type Download = {
@@ -59,11 +66,10 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
     const [items, setItems] = useState<Download[]>(recentDownloads);
     const [balance] = useState(stats.credits_balance);
 
-    const { setData, post, processing, errors, reset } = useForm({
-        links: [] as string[],
-        is_premium: true as boolean,
-        zip: false as boolean,
-    });
+    const [isPremium, setIsPremium] = useState(true);
+    const [wantZip, setWantZip] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<{ links?: string }>({});
 
     const linkList = useMemo(
         () =>
@@ -97,18 +103,22 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (!linkList.length) return;
-        setData('links', linkList);
-        post(route('downloads.store'), {
-            preserveScroll: true,
-            onSuccess: () => {
-                setBulkText('');
-                reset('links');
+        setProcessing(true);
+        setErrors({});
+        router.post(
+            route('downloads.store'),
+            { links: linkList, is_premium: isPremium, zip: wantZip },
+            {
+                preserveScroll: true,
+                onSuccess: () => setBulkText(''),
+                onError: (errs) => setErrors(errs as { links?: string }),
+                onFinish: () => setProcessing(false),
             },
-        });
+        );
     };
 
     const lowestPremium = useMemo(() => {
-        const prices = providers.map((p) => p.premium_credits).filter((v): v is number => v !== null);
+        const prices = providers.flatMap((p) => p.types.filter((t) => t.is_premium).map((t) => t.credits));
         return prices.length ? Math.min(...prices) : null;
     }, [providers]);
 
@@ -209,7 +219,7 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                         <p className="text-sm font-medium">Premium</p>
                                         <p className="text-xs text-muted-foreground">Maioria dos bancos exige</p>
                                     </div>
-                                    <Switch defaultChecked onCheckedChange={(v) => setData('is_premium', v)} />
+                                    <Switch checked={isPremium} onCheckedChange={setIsPremium} />
                                 </div>
 
                                 <div className="flex items-center justify-between rounded-md border p-3">
@@ -217,7 +227,7 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                         <p className="text-sm font-medium">Empacotar em ZIP</p>
                                         <p className="text-xs text-muted-foreground">Útil em lotes grandes</p>
                                     </div>
-                                    <Switch onCheckedChange={(v) => setData('zip', v)} />
+                                    <Switch checked={wantZip} onCheckedChange={setWantZip} />
                                 </div>
 
                                 <Button type="submit" disabled={processing || !linkList.length} className="w-full">
@@ -339,19 +349,24 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                             </div>
                                             <span className="ml-2 inline-flex size-2 shrink-0 rounded-full bg-emerald-500" />
                                         </div>
-                                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                            <div className="rounded-md bg-muted/60 px-2 py-1.5">
-                                                <p className="text-muted-foreground">Normal</p>
-                                                <p className="font-semibold">
-                                                    {p.normal_credits !== null ? `${p.normal_credits} créd.` : '—'}
-                                                </p>
-                                            </div>
-                                            <div className="rounded-md bg-primary/10 px-2 py-1.5 text-primary">
-                                                <p className="text-primary/70">Premium</p>
-                                                <p className="font-semibold">
-                                                    {p.premium_credits !== null ? `${p.premium_credits} créd.` : '—'}
-                                                </p>
-                                            </div>
+                                        <div className="mt-3 space-y-1 text-xs">
+                                            {p.types.map((t) => (
+                                                <div
+                                                    key={t.type}
+                                                    className={`flex items-center justify-between rounded-md px-2 py-1.5 ${
+                                                        t.is_premium ? 'bg-primary/10 text-primary' : 'bg-muted/60'
+                                                    }`}
+                                                >
+                                                    <span>
+                                                        {t.kind_label}
+                                                        {t.is_premium && <span className="ml-1 text-[9px] opacity-70">PRO</span>}
+                                                    </span>
+                                                    <span className="font-semibold">{t.credits} créd.</span>
+                                                </div>
+                                            ))}
+                                            {p.types.length === 0 && (
+                                                <p className="text-muted-foreground">Nenhum tipo habilitado.</p>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
