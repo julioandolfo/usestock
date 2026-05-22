@@ -14,6 +14,8 @@ class GeneralSettings extends Settings
 
     public string $support_email;
 
+    public ?string $support_whatsapp;
+
     public bool $installed;
 
     public bool $allow_registration;

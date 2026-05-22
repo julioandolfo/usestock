@@ -40,6 +40,7 @@ class HandleInertiaRequests extends Middleware
                 'name' => $general->brand_name,
                 'primary_color' => $general->primary_color,
                 'support_email' => $general->support_email,
+                'support_whatsapp' => $general->support_whatsapp,
             ],
             'reverb' => [
                 'key' => config('reverb.apps.apps.0.key'),

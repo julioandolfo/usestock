@@ -19,6 +19,7 @@ type Props = {
     general: {
         brand_name: string;
         support_email: string;
+        support_whatsapp: string | null;
         primary_color: string;
         allow_registration: boolean;
         require_email_verification: boolean;
@@ -112,6 +113,13 @@ function GeneralForm({ initial }: { initial: Props['general'] }) {
                     </Field>
                     <Field label="Email de suporte" error={form.errors.support_email}>
                         <Input value={form.data.support_email} onChange={(e) => form.setData('support_email', e.target.value)} />
+                    </Field>
+                    <Field label="WhatsApp (DDD + número)" error={form.errors.support_whatsapp}>
+                        <Input
+                            placeholder="(35) 99180-3209"
+                            value={form.data.support_whatsapp ?? ''}
+                            onChange={(e) => form.setData('support_whatsapp', e.target.value)}
+                        />
                     </Field>
                     <Field label="Cor primária" error={form.errors.primary_color}>
                         <Input value={form.data.primary_color} onChange={(e) => form.setData('primary_color', e.target.value)} />
