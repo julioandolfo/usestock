@@ -16,7 +16,10 @@ x-app-env: &app-env
   APP_NAME: "UseStock"
   APP_ENV: "production"
   APP_DEBUG: "false"
-  APP_URL: "${SERVICE_FQDN_APP:-http://localhost}"
+  APP_URL: "${SERVICE_FQDN_APP_80:-${SERVICE_FQDN_APP:-http://localhost}}"
+  ASSET_URL: "${SERVICE_FQDN_APP_80:-${SERVICE_FQDN_APP:-}}"
+  # Cookies follow whichever scheme the public URL announces.
+  SESSION_SECURE_COOKIE: "${SESSION_SECURE_COOKIE:-auto}"
   APP_KEY: "${APP_KEY:-}"
 
   LOG_CHANNEL: "stack"

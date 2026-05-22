@@ -34,6 +34,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
         ]);
+
+        // Behind Coolify's Traefik proxy: trust every hop, so X-Forwarded-Proto
+        // is honoured and Laravel generates https:// URLs / sets secure cookies
+        // when the public-facing scheme is HTTPS.
+        $middleware->trustProxies(at: '*', headers: \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
