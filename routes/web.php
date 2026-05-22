@@ -50,6 +50,9 @@ Route::middleware(['auth', 'installed'])->group(function () {
     Route::post('/downloads', [DownloadController::class, 'store'])
         ->middleware('throttle_downloads')
         ->name('downloads.store');
+    Route::post('/downloads/preview', [DownloadController::class, 'preview'])
+        ->middleware('throttle:60,1')
+        ->name('downloads.preview');
     Route::get('/downloads/{public_id}', [DownloadController::class, 'show'])->name('downloads.show');
 
     Route::get('/batches/{public_id}', [BatchController::class, 'show'])->name('batches.show');

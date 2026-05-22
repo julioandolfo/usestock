@@ -93,7 +93,9 @@ export default function DownloadShow({ download }: { download: Download }) {
                     <CardContent className="space-y-3">
                         {state.status === 'ready' ? (
                             <Button asChild className="w-full">
-                                <Link href={route('library.file', state.public_id)}>Baixar arquivo</Link>
+                                <a href={route('library.file', state.public_id)} download>
+                                    Baixar arquivo
+                                </a>
                             </Button>
                         ) : (
                             <p className="text-sm text-muted-foreground">
