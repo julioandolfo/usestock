@@ -7,6 +7,7 @@ use App\Jobs\SyncProvidersJob;
 use App\Models\PricingRule;
 use App\Models\Provider;
 use App\Services\Pricing\PricingResolver;
+use App\Support\ProviderType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,7 +17,7 @@ class ProviderController extends Controller
 {
     public function index(Request $request, PricingResolver $resolver): Response
     {
-        $q = Provider::query()->orderBy('name');
+        $q = Provider::query()->orderBy('name')->orderBy('is_premium')->orderBy('type');
 
         if ($search = $request->string('q')->trim()->toString()) {
             $q->where(function ($w) use ($search) {
@@ -26,38 +27,49 @@ class ProviderController extends Controller
             });
         }
 
-        if ($request->filled('premium')) {
-            $q->where('is_premium', $request->boolean('premium'));
-        }
+        // Fetch ALL matching rows (no pagination) — rendered grouped by provider.
+        $rows = $q->get();
 
-        $paginator = $q->paginate(40)->withQueryString();
-
-        // Decorate each provider with its currently-effective credit cost
-        // and the id of the provider-specific override rule (if any), so the
-        // admin can edit costs directly from this page.
-        $providers = $paginator->getCollection()->map(function (Provider $p) use ($resolver) {
+        $decorated = $rows->map(function (Provider $p) use ($resolver) {
             $override = PricingRule::query()
                 ->where('provider_id', $p->id)
                 ->where('active', true)
                 ->latest('id')
                 ->first();
 
+            $kind = ProviderType::describe($p->type);
+
             return array_merge($p->toArray(), [
+                'kind' => $kind['kind'],
+                'kind_label' => $kind['label'],
                 'effective_credits' => $resolver->creditsFor($p),
                 'override_rule' => $override ? [
                     'id' => $override->id,
                     'strategy' => $override->strategy,
-                    'value' => $override->value,
+                    'value' => (float) $override->value,
                     'min_credits' => $override->min_credits,
                 ] : null,
             ]);
         });
-        $paginator->setCollection($providers);
+
+        $groups = $decorated
+            ->groupBy('slug')
+            ->map(fn ($groupRows) => [
+                'slug' => $groupRows->first()['slug'],
+                'name' => $groupRows->first()['name'],
+                'host' => $groupRows->first()['host'],
+                'logo' => $groupRows->first()['logo'],
+                'total_rows' => $groupRows->count(),
+                'enabled_rows' => $groupRows->where('enabled', true)->count(),
+                'rows' => $groupRows->values(),
+            ])
+            ->values();
 
         return Inertia::render('admin/providers/index', [
-            'providers' => $paginator,
-            'filters' => $request->only(['q', 'premium']),
+            'groups' => $groups,
+            'filters' => $request->only(['q']),
             'lastSyncAt' => Provider::max('synced_at'),
+            'totalProviders' => $rows->count(),
         ]);
     }
 
@@ -73,7 +85,23 @@ class ProviderController extends Controller
     }
 
     /**
-     * Single-shot endpoint: set a fixed credit cost for this provider,
+     * Toggle enable/disable for ALL types belonging to a provider slug, in one shot.
+     * Useful when the admin wants to disable Shutterstock entirely instead of clicking
+     * a switch per content type.
+     */
+    public function bulkUpdate(Request $request, string $slug): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+        ]);
+
+        $count = Provider::where('slug', $slug)->update(['enabled' => $data['enabled']]);
+
+        return back()->with('status', "{$count} tipo(s) de {$slug} ".($data['enabled'] ? 'habilitado(s)' : 'desabilitado(s)').'.');
+    }
+
+    /**
+     * Single-shot endpoint: set a fixed credit cost for this provider row,
      * upserting the provider-scoped pricing rule. Pass `credits=null` to remove
      * the override (falls back to global rule).
      */
@@ -99,7 +127,9 @@ class ProviderController extends Controller
             ]
         );
 
-        return back()->with('status', "Custo do {$provider->name} definido para {$data['credits']} créditos.");
+        $kind = ProviderType::describe($provider->type);
+
+        return back()->with('status', "Custo de {$provider->name} ({$kind['label']}) definido para {$data['credits']} créditos.");
     }
 
     public function sync(): RedirectResponse
