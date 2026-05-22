@@ -51,12 +51,27 @@ export default function UserShow({ user, transactions, downloads }: Props) {
 
     const credits = useForm({ amount: 0, description: '' });
     const ban = useForm({ reason: '' });
+    const edit = useForm({ name: user.name, email: user.email, password: '' });
 
     const isAdmin = user.roles.some((r) => r.name === 'admin');
 
     const submitCredits: FormEventHandler = (e) => {
         e.preventDefault();
         credits.post(route('admin.users.credits', user.id), { preserveScroll: true });
+    };
+
+    const submitEdit: FormEventHandler = (e) => {
+        e.preventDefault();
+        edit.transform((d) => {
+            // Don't send empty password — keeps the existing one.
+            const payload: Record<string, string> = { name: d.name, email: d.email };
+            if (d.password) payload.password = d.password;
+            return payload;
+        });
+        edit.patch(route('admin.users.update', user.id), {
+            preserveScroll: true,
+            onSuccess: () => edit.setData('password', ''),
+        });
     };
 
     return (
@@ -115,6 +130,52 @@ export default function UserShow({ user, transactions, downloads }: Props) {
                 </Card>
 
                 <Card className="lg:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Editar dados</CardTitle>
+                        <CardDescription>
+                            Atualize nome, e-mail ou redefina a senha. Deixe a senha em branco para manter a atual.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <form onSubmit={submitEdit} className="grid gap-3 md:grid-cols-3">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-name">Nome</Label>
+                                <Input
+                                    id="edit-name"
+                                    value={edit.data.name}
+                                    onChange={(e) => edit.setData('name', e.target.value)}
+                                />
+                                <InputError message={edit.errors.name} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-email">E-mail</Label>
+                                <Input
+                                    id="edit-email"
+                                    type="email"
+                                    value={edit.data.email}
+                                    onChange={(e) => edit.setData('email', e.target.value)}
+                                />
+                                <InputError message={edit.errors.email} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-password">Nova senha (opcional)</Label>
+                                <Input
+                                    id="edit-password"
+                                    type="text"
+                                    value={edit.data.password}
+                                    onChange={(e) => edit.setData('password', e.target.value)}
+                                    placeholder="Mínimo 8 caracteres"
+                                />
+                                <InputError message={edit.errors.password} />
+                            </div>
+                            <Button type="submit" disabled={edit.processing} className="md:col-span-3">
+                                {edit.processing ? 'Salvando…' : 'Salvar alterações'}
+                            </Button>
+                        </form>
+                    </CardContent>
+                </Card>
+
+                <Card className="lg:col-span-3">
                     <CardHeader>
                         <CardTitle>Ajustar créditos</CardTitle>
                         <CardDescription>Use valores positivos para creditar e negativos para debitar.</CardDescription>

@@ -75,7 +75,9 @@ Route::middleware(['auth', 'installed', 'role:admin'])
         Route::get('/', AdminDashboardController::class)->name('dashboard');
 
         Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
         Route::get('/users/{user}', [AdminUserController::class, 'show'])->name('users.show');
+        Route::patch('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
         Route::post('/users/{user}/credits', [AdminUserController::class, 'adjustCredits'])->name('users.credits');
         Route::post('/users/{user}/ban', [AdminUserController::class, 'ban'])->name('users.ban');
         Route::post('/users/{user}/unban', [AdminUserController::class, 'unban'])->name('users.unban');
