@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\User\BatchController;
+use App\Http\Controllers\User\DashboardController;
 use App\Http\Controllers\User\DownloadController;
 use App\Http\Controllers\User\FileServeController;
 use App\Http\Controllers\User\LibraryController;
@@ -43,7 +44,7 @@ Route::post('/webhooks/mercadopago', MercadoPagoWebhookController::class)
 // Authenticated user area
 // -------------------------------------------------------------------
 Route::middleware(['auth', 'installed'])->group(function () {
-    Route::get('/dashboard', fn () => Inertia::render('dashboard'))->name('dashboard');
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     Route::get('/downloads', [DownloadController::class, 'index'])->name('downloads.index');
     Route::post('/downloads', [DownloadController::class, 'store'])
