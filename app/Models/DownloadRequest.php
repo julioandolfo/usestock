@@ -86,6 +86,33 @@ class DownloadRequest extends Model
         });
     }
 
+    /**
+     * Belt-and-suspenders sanitiser for `failure_reason`: even if a row was
+     * written before UpstreamErrorTranslator existed (or by code that bypassed
+     * it), we never want to leak the upstream provider's name to end users.
+     * The accessor runs the stored value through the translator on every read.
+     */
+    public function getFailureReasonAttribute(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return $value;
+        }
+
+        $translator = app(\App\Support\UpstreamErrorTranslator::class);
+        $lower = mb_strtolower($value);
+
+        // If the raw message references the upstream provider in any way,
+        // re-translate it. Otherwise keep the original (our own messages
+        // like "Créditos insuficientes" should pass through unchanged).
+        foreach (['getstocks', '/api/v1/', '/api/auth/'] as $needle) {
+            if (str_contains($lower, $needle)) {
+                return $translator->humanize($value);
+            }
+        }
+
+        return $value;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

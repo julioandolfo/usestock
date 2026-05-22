@@ -40,6 +40,10 @@ class DashboardController extends Controller
             ->where('created_at', '>=', now()->startOfMonth())
             ->count();
 
+        $totalDownloads = DownloadRequest::query()
+            ->where('user_id', $user->id)
+            ->count();
+
         $providers = Provider::query()
             ->where('enabled', true)
             ->orderBy('name')
@@ -84,7 +88,7 @@ class DashboardController extends Controller
                 'credits_balance' => $user->credits_balance,
                 'library_count' => $libraryCount,
                 'month_downloads' => $monthDownloads,
-                'total_downloads' => $user->downloads_count,
+                'total_downloads' => $totalDownloads,
             ],
             'recentDownloads' => $recentDownloads,
             'providers' => $providers,
