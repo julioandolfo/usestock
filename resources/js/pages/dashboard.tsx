@@ -206,22 +206,22 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
             <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
                 {/* Welcome banner */}
                 <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary/90 to-primary/70 text-primary-foreground">
-                    <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6">
-                        <div>
-                            <div className="flex items-center gap-2 text-sm opacity-90">
+                    <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:p-6">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-xs opacity-90 sm:text-sm">
                                 <Sparkles className="size-4" />
                                 Bem-vindo de volta
                             </div>
-                            <h2 className="mt-1 text-xl font-bold sm:text-2xl">
-                                Você tem {formatNumber(balance)} crédito{balance === 1 ? '' : 's'} disponível{balance === 1 ? '' : 'eis'}
+                            <h2 className="mt-1 text-lg font-bold sm:text-2xl">
+                                {formatNumber(balance)} crédito{balance === 1 ? '' : 's'} disponíve{balance === 1 ? 'l' : 'is'}
                             </h2>
-                            <p className="mt-1 text-sm opacity-90">
+                            <p className="mt-1 text-xs opacity-90 sm:text-sm">
                                 {lowestPremium
-                                    ? `A partir de ${lowestPremium} créd. por download premium · arquivos ficam ${limits.file_ttl_days} dias na biblioteca`
+                                    ? `A partir de ${lowestPremium} créd. por download · arquivos ficam ${limits.file_ttl_days} dias na biblioteca`
                                     : 'Cole um link abaixo pra começar'}
                             </p>
                         </div>
-                        <Button asChild variant="secondary" size="lg">
+                        <Button asChild variant="secondary" size="sm" className="sm:size-lg">
                             <Link href={route('billing.index')}>
                                 <Coins className="mr-2 size-4" />
                                 Comprar mais
@@ -259,7 +259,7 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                 </div>
 
                 {/* Quick download + recent */}
-                <div className="grid gap-6 lg:grid-cols-3">
+                <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
                     <Card className="lg:col-span-1">
                         <CardHeader>
                             <div className="flex items-center gap-2">
@@ -525,12 +525,12 @@ function StatCard({
     };
     return (
         <Card>
-            <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-muted-foreground">{label}</p>
-                    <div className={`flex size-8 items-center justify-center rounded-md ${tones[accent]}`}>{icon}</div>
+            <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium text-muted-foreground sm:text-xs">{label}</p>
+                    <div className={`flex size-7 shrink-0 items-center justify-center rounded-md sm:size-8 ${tones[accent]}`}>{icon}</div>
                 </div>
-                <p className="mt-3 text-2xl font-bold">{value}</p>
+                <p className="mt-2 text-lg font-bold sm:mt-3 sm:text-2xl">{value}</p>
             </CardContent>
         </Card>
     );
