@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber, formatPhoneMask } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
@@ -16,6 +16,7 @@ type User = {
     id: number;
     name: string;
     email: string;
+    phone: string | null;
     credits_balance: number;
     downloads_count: number;
     banned_at: string | null;
@@ -51,7 +52,12 @@ export default function UserShow({ user, transactions, downloads }: Props) {
 
     const credits = useForm({ amount: 0, description: '' });
     const ban = useForm({ reason: '' });
-    const edit = useForm({ name: user.name, email: user.email, password: '' });
+    const edit = useForm({
+        name: user.name,
+        email: user.email,
+        phone: user.phone ? formatPhoneMask(user.phone) : '',
+        password: '',
+    });
 
     const isAdmin = user.roles.some((r) => r.name === 'admin');
 
@@ -63,8 +69,11 @@ export default function UserShow({ user, transactions, downloads }: Props) {
     const submitEdit: FormEventHandler = (e) => {
         e.preventDefault();
         edit.transform((d) => {
-            // Don't send empty password — keeps the existing one.
-            const payload: Record<string, string> = { name: d.name, email: d.email };
+            const payload: Record<string, string> = {
+                name: d.name,
+                email: d.email,
+                phone: d.phone, // backend normalises to digits
+            };
             if (d.password) payload.password = d.password;
             return payload;
         });
@@ -137,7 +146,7 @@ export default function UserShow({ user, transactions, downloads }: Props) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <form onSubmit={submitEdit} className="grid gap-3 md:grid-cols-3">
+                        <form onSubmit={submitEdit} className="grid gap-3 md:grid-cols-2">
                             <div className="space-y-2">
                                 <Label htmlFor="edit-name">Nome</Label>
                                 <Input
@@ -158,6 +167,18 @@ export default function UserShow({ user, transactions, downloads }: Props) {
                                 <InputError message={edit.errors.email} />
                             </div>
                             <div className="space-y-2">
+                                <Label htmlFor="edit-phone">WhatsApp</Label>
+                                <Input
+                                    id="edit-phone"
+                                    type="tel"
+                                    inputMode="tel"
+                                    value={edit.data.phone}
+                                    onChange={(e) => edit.setData('phone', formatPhoneMask(e.target.value))}
+                                    placeholder="(35) 99180-3209"
+                                />
+                                <InputError message={edit.errors.phone} />
+                            </div>
+                            <div className="space-y-2">
                                 <Label htmlFor="edit-password">Nova senha (opcional)</Label>
                                 <Input
                                     id="edit-password"
@@ -168,7 +189,7 @@ export default function UserShow({ user, transactions, downloads }: Props) {
                                 />
                                 <InputError message={edit.errors.password} />
                             </div>
-                            <Button type="submit" disabled={edit.processing} className="md:col-span-3">
+                            <Button type="submit" disabled={edit.processing} className="md:col-span-2">
                                 {edit.processing ? 'Salvando…' : 'Salvar alterações'}
                             </Button>
                         </form>

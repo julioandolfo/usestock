@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber, formatPhoneMask } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
@@ -146,6 +146,7 @@ function CreateUserDialog({ onSuccess }: { onSuccess: () => void }) {
     const form = useForm({
         name: '',
         email: '',
+        phone: '',
         password: '',
         role: 'user' as 'user' | 'admin',
         initial_credits: 0,
@@ -201,6 +202,19 @@ function CreateUserDialog({ onSuccess }: { onSuccess: () => void }) {
                         required
                     />
                     <InputError message={form.errors.email} />
+                </div>
+
+                <div>
+                    <Label htmlFor="cu-phone">WhatsApp</Label>
+                    <Input
+                        id="cu-phone"
+                        type="tel"
+                        inputMode="tel"
+                        value={form.data.phone}
+                        onChange={(e) => form.setData('phone', formatPhoneMask(e.target.value))}
+                        placeholder="(35) 99180-3209"
+                    />
+                    <InputError message={form.errors.phone} />
                 </div>
 
                 <div>

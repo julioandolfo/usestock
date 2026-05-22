@@ -71,10 +71,23 @@ class MercadoPagoWebhookController extends Controller
                 user: $payment->user,
                 amount: $payment->credits_to_grant,
                 type: CreditTransaction::TYPE_PURCHASE,
-                description: "Pagamento MercadoPago {$payment->provider_payment_id}",
+                description: 'Pagamento online aprovado',
                 reference: $payment,
                 metadata: ['method' => $payment->method],
             );
+
+            // Notify the user that their purchase landed in the account.
+            try {
+                $user = $payment->user->fresh();
+                \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\CreditsCreditedMail(
+                    user: $user,
+                    amount: $payment->credits_to_grant,
+                    balanceAfter: $user->credits_balance,
+                    reason: 'Compra de pacote (Pix/Cartão) aprovada',
+                ));
+            } catch (\Throwable $e) {
+                Log::warning('Purchase mail failed: '.$e->getMessage(), ['payment_id' => $payment->id]);
+            }
         }
 
         return response('ok', 200);

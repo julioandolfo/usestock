@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\CreditsCreditedMail;
+use App\Mail\WelcomeUserMail;
 use App\Models\AuditLog;
 use App\Models\CreditTransaction;
 use App\Models\User;
@@ -11,6 +13,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -64,17 +68,20 @@ class UserController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:160', Rule::unique('users', 'email')],
+            'phone' => ['nullable', 'string', 'max:20'],
             'password' => ['required', 'string', 'min:8'],
             'role' => ['required', Rule::in(['user', 'admin'])],
             'initial_credits' => ['nullable', 'integer', 'min:0', 'max:1000000'],
         ]);
 
         $admin = $request->user();
+        $plainPassword = $data['password'];
 
-        $user = DB::transaction(function () use ($data, $admin, $ledger) {
+        [$user, $credits] = DB::transaction(function () use ($data, $admin, $ledger) {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => mb_strtolower(trim($data['email'])),
+                'phone' => preg_replace('/\D+/', '', (string) ($data['phone'] ?? '')) ?: null,
                 'password' => Hash::make($data['password']),
                 'email_verified_at' => now(),
             ]);
@@ -107,8 +114,30 @@ class UserController extends Controller
                 'user_agent' => request()->userAgent(),
             ]);
 
-            return $user;
+            return [$user, $credits];
         });
+
+        // Welcome e-mail with the temporary password so the admin doesn't
+        // need to share it through a side channel.
+        try {
+            Mail::to($user->email)->send(new WelcomeUserMail($user, $plainPassword));
+        } catch (\Throwable $e) {
+            Log::warning('Welcome mail failed: '.$e->getMessage(), ['user_id' => $user->id]);
+        }
+
+        // If credits were granted upfront, tell the user.
+        if ($credits > 0) {
+            try {
+                Mail::to($user->email)->send(new CreditsCreditedMail(
+                    user: $user->fresh(),
+                    amount: $credits,
+                    balanceAfter: $user->fresh()->credits_balance,
+                    reason: 'Crédito inicial ao criar a conta',
+                ));
+            } catch (\Throwable $e) {
+                Log::warning('Credit mail failed: '.$e->getMessage(), ['user_id' => $user->id]);
+            }
+        }
 
         return redirect()
             ->route('admin.users.show', $user->id)
@@ -145,6 +174,22 @@ class UserController extends Controller
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
+
+        // Only mail on credit (positive amount) — debits are silent so we
+        // don't spam the user when the admin is correcting a mistake.
+        if ($amount > 0) {
+            try {
+                $fresh = $user->fresh();
+                Mail::to($fresh->email)->send(new CreditsCreditedMail(
+                    user: $fresh,
+                    amount: $amount,
+                    balanceAfter: $fresh->credits_balance,
+                    reason: $description ?: 'Crédito adicionado pelo administrador',
+                ));
+            } catch (\Throwable $e) {
+                Log::warning('Credit mail failed: '.$e->getMessage(), ['user_id' => $user->id]);
+            }
+        }
 
         return back()->with('status', 'Créditos ajustados.');
     }
@@ -193,12 +238,14 @@ class UserController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'email' => ['sometimes', 'required', 'email', 'max:160', Rule::unique('users', 'email')->ignore($user->id)],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
             'password' => ['sometimes', 'nullable', 'string', 'min:8'],
         ]);
 
         $before = [
             'name' => $user->name,
             'email' => $user->email,
+            'phone' => $user->phone,
         ];
 
         if (array_key_exists('name', $data)) {
@@ -206,6 +253,9 @@ class UserController extends Controller
         }
         if (array_key_exists('email', $data)) {
             $user->email = mb_strtolower(trim($data['email']));
+        }
+        if (array_key_exists('phone', $data)) {
+            $user->phone = preg_replace('/\D+/', '', (string) ($data['phone'] ?? '')) ?: null;
         }
         if (! empty($data['password'])) {
             $user->password = Hash::make($data['password']);
@@ -221,6 +271,7 @@ class UserController extends Controller
             'after' => [
                 'name' => $user->name,
                 'email' => $user->email,
+                'phone' => $user->phone,
                 'password_changed' => ! empty($data['password']),
             ],
             'ip_address' => $request->ip(),
