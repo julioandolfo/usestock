@@ -44,3 +44,9 @@ export const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destruct
     failed: 'destructive',
     refunded: 'destructive',
 };
+
+export const IN_PROGRESS_STATUSES = new Set(['queued', 'resolving', 'requesting', 'downloading']);
+
+export function isInProgress(status: string): boolean {
+    return IN_PROGRESS_STATUSES.has(status);
+}

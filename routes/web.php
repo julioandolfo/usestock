@@ -53,14 +53,10 @@ Route::middleware(['auth', 'installed'])->group(function () {
     Route::get('/downloads/{public_id}', [DownloadController::class, 'show'])->name('downloads.show');
 
     Route::get('/batches/{public_id}', [BatchController::class, 'show'])->name('batches.show');
-    Route::get('/batches/{public_id}/zip', [BatchController::class, 'zip'])
-        ->middleware('signed')
-        ->name('batches.zip');
+    Route::get('/batches/{public_id}/zip', [BatchController::class, 'zip'])->name('batches.zip');
 
     Route::get('/library', [LibraryController::class, 'index'])->name('library.index');
-    Route::get('/library/{public_id}/file', FileServeController::class)
-        ->middleware('signed')
-        ->name('library.file');
+    Route::get('/library/{public_id}/file', FileServeController::class)->name('library.file');
 
     Route::get('/billing', [PaymentController::class, 'index'])->name('billing.index');
     Route::post('/billing/checkout', [PaymentController::class, 'checkout'])->name('billing.checkout');

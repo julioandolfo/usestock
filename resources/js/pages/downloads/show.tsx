@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
-import { formatBytes, formatDate, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { formatBytes, formatDate, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { Loader2 } from 'lucide-react';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { useCallback, useState } from 'react';
@@ -55,7 +56,8 @@ export default function DownloadShow({ download }: { download: Download }) {
                     <CardHeader>
                         <div className="flex items-start justify-between gap-3">
                             <CardTitle className="truncate">{state.item_name || state.source_url}</CardTitle>
-                            <Badge variant={STATUS_VARIANTS[state.status] ?? 'secondary'}>
+                            <Badge variant={STATUS_VARIANTS[state.status] ?? 'secondary'} className="gap-1.5">
+                                {isInProgress(state.status) && <Loader2 className="size-3 animate-spin" />}
                                 {STATUS_LABELS[state.status] ?? state.status}
                             </Badge>
                         </div>

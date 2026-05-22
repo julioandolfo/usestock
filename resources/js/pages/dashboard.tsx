@@ -7,11 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
-import { formatBytes, formatNumber, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { formatBytes, formatNumber, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CheckCircle2, Coins, Download, FileArchive, Sparkles, TrendingUp, Zap } from 'lucide-react';
-import { FormEventHandler, useCallback, useMemo, useState } from 'react';
+import { CheckCircle2, Coins, Download, FileArchive, Loader2, Sparkles, TrendingUp, Zap } from 'lucide-react';
+import { FormEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 
@@ -101,6 +101,23 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
     }, []);
     useDownloadEvents(onEvent);
 
+    // Merge fresh recentDownloads from the server (e.g. after a router.post that
+    // reloads the page partially) into local state so newly-queued items appear
+    // immediately in the activity table without losing the realtime updates we
+    // already applied via Reverb.
+    useEffect(() => {
+        setItems((prev) => {
+            const byId = new Map(prev.map((p) => [p.public_id, p]));
+            const merged = recentDownloads.map((fresh) => byId.get(fresh.public_id) ?? fresh);
+            for (const local of prev) {
+                if (!merged.find((d) => d.public_id === local.public_id)) {
+                    merged.push(local);
+                }
+            }
+            return merged.slice(0, 8);
+        });
+    }, [recentDownloads]);
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (!linkList.length) return;
@@ -116,8 +133,10 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                 preserveState: true,
                 onSuccess: () => {
                     setBulkText('');
-                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enviado${n === 1 ? '' : 's'} para a fila. Acompanhe abaixo.`);
+                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enviado${n === 1 ? '' : 's'} para a fila. Acompanhe na atividade recente.`);
                     setTimeout(() => setSuccessMsg(null), 6000);
+                    // Pull the freshest data so the new download(s) show up.
+                    router.reload({ only: ['recentDownloads', 'stats'] });
                 },
                 onError: (errs) => setErrors(errs as { links?: string }),
                 onFinish: () => setProcessing(false),
@@ -302,7 +321,10 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                                 </TableCell>
                                                 <TableCell className="text-xs capitalize">{d.provider_slug || '—'}</TableCell>
                                                 <TableCell>
-                                                    <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'}>
+                                                    <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'} className="gap-1.5">
+                                                        {isInProgress(d.status) && (
+                                                            <Loader2 className="size-3 animate-spin" />
+                                                        )}
                                                         {STATUS_LABELS[d.status] ?? d.status}
                                                     </Badge>
                                                 </TableCell>
