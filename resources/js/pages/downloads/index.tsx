@@ -102,10 +102,11 @@ export default function DownloadsIndex({ downloads }: Props) {
             {
                 preserveScroll: true,
                 preserveState: true,
-                onSuccess: () => {
+                onSuccess: (page) => {
                     setBulkText('');
-                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enfileirado${n === 1 ? '' : 's'}. O status aparece em tempo real.`);
-                    setTimeout(() => setSuccessMsg(null), 6000);
+                    const info = (page.props as { flash?: { lastSubmit?: { total: number; queued: number; reused: number } } }).flash?.lastSubmit;
+                    setSuccessMsg(buildSubmitMessage(info, n));
+                    setTimeout(() => setSuccessMsg(null), 8000);
                     router.reload({ only: ['downloads'] });
                 },
                 onError: (errs) => setErrors(errs as { links?: string }),
@@ -236,4 +237,21 @@ export default function DownloadsIndex({ downloads }: Props) {
             </div>
         </AppLayout>
     );
+}
+
+function buildSubmitMessage(
+    info: { total: number; queued: number; reused: number } | undefined,
+    fallbackCount: number,
+): string {
+    if (!info) {
+        return `${fallbackCount} link${fallbackCount === 1 ? '' : 's'} enfileirado${fallbackCount === 1 ? '' : 's'}.`;
+    }
+    const { total, queued, reused } = info;
+    if (reused > 0 && queued === 0) {
+        return `${reused} arquivo${reused === 1 ? '' : 's'} já estava${reused === 1 ? '' : 'm'} na sua biblioteca — sem cobrança.`;
+    }
+    if (reused > 0 && queued > 0) {
+        return `${queued} item${queued === 1 ? '' : 'ns'} enfileirado${queued === 1 ? '' : 's'} · ${reused} reaproveitado${reused === 1 ? '' : 's'} sem cobrança.`;
+    }
+    return `${total} link${total === 1 ? '' : 's'} enfileirado${total === 1 ? '' : 's'}. O status aparece em tempo real.`;
 }

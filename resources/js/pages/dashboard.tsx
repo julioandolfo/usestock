@@ -131,11 +131,11 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
             {
                 preserveScroll: true,
                 preserveState: true,
-                onSuccess: () => {
+                onSuccess: (page) => {
                     setBulkText('');
-                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enviado${n === 1 ? '' : 's'} para a fila. Acompanhe na atividade recente.`);
-                    setTimeout(() => setSuccessMsg(null), 6000);
-                    // Pull the freshest data so the new download(s) show up.
+                    const submitInfo = (page.props as { flash?: { lastSubmit?: { total: number; queued: number; reused: number } } }).flash?.lastSubmit;
+                    setSuccessMsg(buildSubmitMessage(submitInfo, n));
+                    setTimeout(() => setSuccessMsg(null), 8000);
                     router.reload({ only: ['recentDownloads', 'stats'] });
                 },
                 onError: (errs) => setErrors(errs as { links?: string }),
@@ -448,4 +448,21 @@ function StatCard({
             </CardContent>
         </Card>
     );
+}
+
+function buildSubmitMessage(
+    info: { total: number; queued: number; reused: number } | undefined,
+    fallbackCount: number,
+): string {
+    if (!info) {
+        return `${fallbackCount} link${fallbackCount === 1 ? '' : 's'} enviado${fallbackCount === 1 ? '' : 's'} para a fila.`;
+    }
+    const { total, queued, reused } = info;
+    if (reused > 0 && queued === 0) {
+        return `${reused} arquivo${reused === 1 ? '' : 's'} já estava${reused === 1 ? '' : 'm'} na sua biblioteca — sem cobrança.`;
+    }
+    if (reused > 0 && queued > 0) {
+        return `${queued} item${queued === 1 ? '' : 'ns'} enfileirado${queued === 1 ? '' : 's'} · ${reused} reaproveitado${reused === 1 ? '' : 's'} sem cobrança.`;
+    }
+    return `${total} link${total === 1 ? '' : 's'} enfileirado${total === 1 ? '' : 's'}. Acompanhe na atividade recente.`;
 }

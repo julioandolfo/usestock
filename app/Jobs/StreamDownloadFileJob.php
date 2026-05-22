@@ -108,8 +108,15 @@ class StreamDownloadFileJob implements ShouldQueue
 
     private function fail(DownloadRequest $download, string $reason, CreditLedger $ledger): void
     {
+        $translator = app(\App\Support\UpstreamErrorTranslator::class);
+        \Illuminate\Support\Facades\Log::warning('Download stream failed', [
+            'download_id' => $download->id,
+            'public_id' => $download->public_id,
+            'raw_reason' => $reason,
+        ]);
+
         $download->status = DownloadRequest::STATUS_FAILED;
-        $download->failure_reason = $reason;
+        $download->failure_reason = $translator->humanize($reason);
         $download->save();
 
         if ($download->credits_charged > 0) {
