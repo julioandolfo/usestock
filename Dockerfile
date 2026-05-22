@@ -13,24 +13,11 @@ COPY . .
 RUN npm run build
 
 # =====================================================================
-# Stage 2 — Composer dependencies (no dev)
+# Stage 2 — PHP base with all runtime extensions
+# Shared by `vendor` and `runtime` so Composer resolves against the same
+# platform the app will actually run on.
 # =====================================================================
-FROM composer:2.8 AS vendor
-WORKDIR /app
-
-COPY composer.json composer.lock ./
-RUN composer install \
-    --no-dev \
-    --no-interaction \
-    --no-scripts \
-    --prefer-dist \
-    --optimize-autoloader \
-    --no-progress
-
-# =====================================================================
-# Stage 3 — Runtime (PHP-FPM 8.4 + extensions)
-# =====================================================================
-FROM php:8.4-fpm-alpine AS runtime
+FROM php:8.4-fpm-alpine AS php-base
 
 RUN apk add --no-cache \
         bash \
@@ -45,10 +32,7 @@ RUN apk add --no-cache \
         libpng-dev \
         libjpeg-turbo-dev \
         freetype-dev \
-        nginx \
-        supervisor \
-        tini \
-        tzdata \
+        $PHPIZE_DEPS \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         bcmath \
@@ -61,6 +45,35 @@ RUN apk add --no-cache \
         gd \
     && pecl install redis \
     && docker-php-ext-enable redis \
+    && apk del $PHPIZE_DEPS \
+    && rm -rf /tmp/* /var/cache/apk/*
+
+COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
+
+# =====================================================================
+# Stage 3 — Composer dependencies (no dev)
+# =====================================================================
+FROM php-base AS vendor
+WORKDIR /app
+
+ENV COMPOSER_MEMORY_LIMIT=-1 \
+    COMPOSER_ALLOW_SUPERUSER=1
+
+COPY composer.json composer.lock ./
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --no-scripts \
+    --prefer-dist \
+    --optimize-autoloader \
+    --no-progress
+
+# =====================================================================
+# Stage 4 — Runtime (PHP-FPM 8.4 + nginx + supervisord)
+# =====================================================================
+FROM php-base AS runtime
+
+RUN apk add --no-cache nginx supervisor tini tzdata \
     && rm -rf /tmp/* /var/cache/apk/*
 
 ENV TZ=America/Sao_Paulo
