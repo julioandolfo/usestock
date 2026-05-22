@@ -25,7 +25,7 @@ class DashboardController extends Controller
             ->get([
                 'public_id', 'source_url', 'item_name', 'provider_slug', 'status',
                 'file_name', 'file_size_bytes', 'failure_reason', 'ready_at',
-                'created_at', 'upstream_thumb_url',
+                'created_at', 'upstream_thumb_url', 'served_count', 'last_served_at',
             ]);
 
         $libraryCount = DownloadRequest::query()

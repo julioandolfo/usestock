@@ -65,6 +65,8 @@ type Download = {
     ready_at: string | null;
     created_at: string;
     upstream_thumb_url: string | null;
+    served_count: number;
+    last_served_at: string | null;
 };
 
 type Props = {
@@ -411,10 +413,15 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                                     {d.status === 'ready' ? (
                                                         <a
                                                             href={route('library.file', d.public_id)}
-                                                            className="text-xs font-medium text-primary hover:underline"
+                                                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                                                             download
                                                         >
                                                             Baixar
+                                                            {d.served_count > 0 && (
+                                                                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                                                                    {d.served_count}×
+                                                                </span>
+                                                            )}
                                                         </a>
                                                     ) : (
                                                         <Link

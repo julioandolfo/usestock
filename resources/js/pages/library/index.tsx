@@ -12,6 +12,7 @@ type LibraryItem = {
     provider_slug: string | null;
     upstream_thumb_url: string | null;
     expires_at: string | null;
+    served_count: number;
 };
 
 export default function LibraryIndex({ items }: { items: { data: LibraryItem[] } }) {
@@ -39,10 +40,17 @@ export default function LibraryIndex({ items }: { items: { data: LibraryItem[] }
                             <CardTitle className="line-clamp-1 text-sm">{item.item_name || item.file_name}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-1 text-xs text-muted-foreground">
-                            <p>{item.provider_slug}</p>
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="truncate">{item.provider_slug}</p>
+                                {item.served_count > 0 && (
+                                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums">
+                                        {item.served_count}× baixado
+                                    </span>
+                                )}
+                            </div>
                             <a
                                 href={route('library.file', item.public_id)}
-                                className="font-medium text-primary hover:underline"
+                                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
                                 download
                             >
                                 Baixar arquivo
