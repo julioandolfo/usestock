@@ -113,6 +113,21 @@ class DownloadRequest extends Model
         return $value;
     }
 
+    /**
+     * Some upstream metadata arrives double-encoded ("peÃ§a" instead of
+     * "peça"). Run every human-facing text through the sanitiser at read
+     * time so legacy rows render correctly without a backfill migration.
+     */
+    public function getItemNameAttribute(?string $value): ?string
+    {
+        return \App\Support\TextSanitiser::fix($value);
+    }
+
+    public function getFileNameAttribute(?string $value): ?string
+    {
+        return \App\Support\TextSanitiser::fix($value);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
