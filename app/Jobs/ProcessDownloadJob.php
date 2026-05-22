@@ -76,9 +76,7 @@ class ProcessDownloadJob implements ShouldBeUnique, ShouldQueue
                 }
             }
 
-            $webhook = $settings->use_webhook
-                ? URL::signedRoute('webhooks.getstocks', ['public_id' => $download->public_id])
-                : null;
+            $webhook = $this->resolveWebhookUrl($settings, $download);
 
             $result = $client->getLink(
                 link: $download->source_url,
@@ -115,6 +113,40 @@ class ProcessDownloadJob implements ShouldBeUnique, ShouldQueue
         $download->status = $status;
         $download->save();
         event(new DownloadStatusChanged($download));
+    }
+
+    /**
+     * Build the webhook URL for GetStocks IF the configured app URL is public + HTTPS.
+     * Returns null otherwise — in which case the PollDownloadStatusJob fallback handles
+     * the wait, so the download still completes even if webhooks are disabled.
+     *
+     * GetStocks rejects URLs that look like development setups (http, localhost, IPs,
+     * .test/.local TLDs) with a generic "The webhook format is invalid" error, so we
+     * pre-validate to avoid the upstream failure entirely.
+     */
+    private function resolveWebhookUrl(GetStocksSettings $settings, DownloadRequest $download): ?string
+    {
+        if (! $settings->use_webhook) {
+            return null;
+        }
+
+        $appUrl = (string) config('app.url');
+        $host = parse_url($appUrl, PHP_URL_HOST) ?: '';
+        $scheme = parse_url($appUrl, PHP_URL_SCHEME) ?: '';
+
+        $isDev =
+            $scheme !== 'https'
+            || $host === ''
+            || $host === 'localhost'
+            || str_ends_with($host, '.test')
+            || str_ends_with($host, '.local')
+            || filter_var($host, FILTER_VALIDATE_IP) !== false;
+
+        if ($isDev) {
+            return null;
+        }
+
+        return URL::signedRoute('webhooks.getstocks', ['public_id' => $download->public_id]);
     }
 
     private function fail(DownloadRequest $download, string $reason, CreditLedger $ledger): void
