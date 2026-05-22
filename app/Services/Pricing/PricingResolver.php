@@ -21,7 +21,7 @@ class PricingResolver
             ->where('active', true)
             ->where(function ($q) use ($provider) {
                 $q->where('provider_id', $provider->id)
-                  ->orWhereNull('provider_id');
+                    ->orWhereNull('provider_id');
             })
             ->orderByRaw('provider_id IS NULL') // provider-specific first
             ->orderByDesc('id')

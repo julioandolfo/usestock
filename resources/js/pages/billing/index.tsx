@@ -20,7 +20,7 @@ type Props = {
 };
 
 export default function BillingIndex({ packages, mercadopago }: Props) {
-    const { post, processing, setData, data } = useForm({ package_id: 0, method: 'pix' });
+    const { post, processing, setData } = useForm({ package_id: 0, method: 'pix' });
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

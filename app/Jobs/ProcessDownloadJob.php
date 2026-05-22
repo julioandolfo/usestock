@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Events\DownloadStatusChanged;
+use App\Models\CreditTransaction;
 use App\Models\DownloadRequest;
 use App\Services\Downloads\CreditLedger;
 use App\Services\GetStocks\GetStocksClient;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\URL;
  *   - Stops here if webhook is enabled (we wait for inbound callback), OR
  *   - Enqueues PollDownloadStatusJob to take over polling.
  */
-class ProcessDownloadJob implements ShouldQueue, ShouldBeUnique
+class ProcessDownloadJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -31,13 +32,14 @@ class ProcessDownloadJob implements ShouldQueue, ShouldBeUnique
     use SerializesModels;
 
     public int $tries = 3;
+
     public int $backoff = 30;
 
     public function __construct(public readonly int $downloadRequestId) {}
 
     public function uniqueId(): string
     {
-        return 'download:' . $this->downloadRequestId;
+        return 'download:'.$this->downloadRequestId;
     }
 
     public function handle(
@@ -70,7 +72,7 @@ class ProcessDownloadJob implements ShouldQueue, ShouldBeUnique
                     }
                     $download->save();
                 } catch (GetStocksException $e) {
-                    Log::warning('getinfo soft-fail: ' . $e->getMessage(), ['download' => $download->id]);
+                    Log::warning('getinfo soft-fail: '.$e->getMessage(), ['download' => $download->id]);
                 }
             }
 
@@ -125,7 +127,7 @@ class ProcessDownloadJob implements ShouldQueue, ShouldBeUnique
             $ledger->credit(
                 user: $download->user,
                 amount: $download->credits_charged,
-                type: \App\Models\CreditTransaction::TYPE_REFUND,
+                type: CreditTransaction::TYPE_REFUND,
                 description: 'Auto refund: download failed',
                 reference: $download,
             );

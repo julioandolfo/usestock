@@ -13,12 +13,19 @@ class DownloadRequest extends Model
     use HasFactory;
 
     public const STATUS_QUEUED = 'queued';
+
     public const STATUS_RESOLVING = 'resolving';
+
     public const STATUS_REQUESTING = 'requesting';
+
     public const STATUS_DOWNLOADING = 'downloading';
+
     public const STATUS_READY = 'ready';
+
     public const STATUS_EXPIRED = 'expired';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_REFUNDED = 'refunded';
 
     protected $fillable = [

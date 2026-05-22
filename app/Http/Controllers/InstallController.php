@@ -55,7 +55,7 @@ class InstallController extends Controller
             $client->refreshToken();
         } catch (GetStocksException $e) {
             throw ValidationException::withMessages([
-                'getstocks_email' => 'GetStocks login failed: ' . $e->getMessage(),
+                'getstocks_email' => 'GetStocks login failed: '.$e->getMessage(),
             ]);
         }
 

@@ -39,9 +39,10 @@ class MercadoPagoWebhookController extends Controller
 
         try {
             MercadoPagoConfig::setAccessToken($settings->access_token);
-            $providerPayment = (new PaymentClient())->get((int) $providerPaymentId);
+            $providerPayment = (new PaymentClient)->get((int) $providerPaymentId);
         } catch (\Throwable $e) {
-            Log::warning('MP webhook fetch failed: ' . $e->getMessage());
+            Log::warning('MP webhook fetch failed: '.$e->getMessage());
+
             return response('lookup-failed', 200);
         }
 

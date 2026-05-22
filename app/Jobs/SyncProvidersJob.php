@@ -20,6 +20,7 @@ class SyncProvidersJob implements ShouldQueue
     use SerializesModels;
 
     public int $tries = 3;
+
     public int $backoff = 60;
 
     public function handle(GetStocksClient $client): void
@@ -27,7 +28,8 @@ class SyncProvidersJob implements ShouldQueue
         try {
             $payload = $client->providers();
         } catch (GetStocksException $e) {
-            Log::warning('SyncProvidersJob: ' . $e->getMessage());
+            Log::warning('SyncProvidersJob: '.$e->getMessage());
+
             return;
         }
 

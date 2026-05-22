@@ -3,7 +3,6 @@
 namespace App\Events;
 
 use App\Models\DownloadRequest;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -21,7 +20,7 @@ class DownloadStatusChanged implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('users.' . $this->download->user_id . '.downloads'),
+            new PrivateChannel('users.'.$this->download->user_id.'.downloads'),
         ];
     }
 

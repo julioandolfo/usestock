@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main, claude/**]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: PHP · Lint + Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: usestock
+          POSTGRES_PASSWORD: usestock
+          POSTGRES_DB: usestock_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U usestock"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, intl, pdo_pgsql, redis, zip, gd
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Install PHP deps
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Configure test env
+        run: |
+          cp .env.example .env || true
+          {
+            echo "APP_ENV=testing"
+            echo "APP_KEY="
+            echo "DB_CONNECTION=pgsql"
+            echo "DB_HOST=127.0.0.1"
+            echo "DB_PORT=5432"
+            echo "DB_DATABASE=usestock_test"
+            echo "DB_USERNAME=usestock"
+            echo "DB_PASSWORD=usestock"
+            echo "REDIS_HOST=127.0.0.1"
+            echo "CACHE_STORE=array"
+            echo "SESSION_DRIVER=array"
+            echo "QUEUE_CONNECTION=sync"
+          } >> .env
+          php artisan key:generate
+
+      - name: Pint (lint)
+        run: vendor/bin/pint --test
+
+      - name: Run Pest tests
+        run: vendor/bin/pest --no-coverage
+
+  frontend:
+    name: Frontend · Types + Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build

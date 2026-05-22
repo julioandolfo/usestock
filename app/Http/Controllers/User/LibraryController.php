@@ -23,7 +23,7 @@ class LibraryController extends Controller
         if ($search = $request->string('q')->trim()->toString()) {
             $query->where(function ($q) use ($search) {
                 $q->where('item_name', 'ilike', "%{$search}%")
-                  ->orWhere('file_name', 'ilike', "%{$search}%");
+                    ->orWhere('file_name', 'ilike', "%{$search}%");
             });
         }
 

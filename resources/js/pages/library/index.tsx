@@ -28,7 +28,6 @@ export default function LibraryIndex({ items }: { items: { data: LibraryItem[] }
                     <Card key={item.public_id} className="overflow-hidden">
                         <div className="aspect-video bg-muted">
                             {item.upstream_thumb_url && (
-                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                     src={item.upstream_thumb_url}
                                     alt={item.item_name ?? ''}

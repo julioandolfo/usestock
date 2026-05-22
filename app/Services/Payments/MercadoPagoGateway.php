@@ -38,7 +38,7 @@ class MercadoPagoGateway
         ]);
 
         try {
-            $client = new PreferenceClient();
+            $client = new PreferenceClient;
             $preference = $client->create([
                 'items' => [[
                     'id' => (string) $package->id,
@@ -68,7 +68,7 @@ class MercadoPagoGateway
                 'provider_payload' => json_decode(json_encode($preference), true),
             ]);
         } catch (\Throwable $e) {
-            Log::error('MercadoPago preference create failed: ' . $e->getMessage());
+            Log::error('MercadoPago preference create failed: '.$e->getMessage());
             $payment->update([
                 'status' => Payment::STATUS_REJECTED,
                 'failure_reason' => $e->getMessage(),

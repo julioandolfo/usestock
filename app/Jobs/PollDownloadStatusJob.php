@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Events\DownloadStatusChanged;
+use App\Models\CreditTransaction;
 use App\Models\DownloadRequest;
 use App\Services\Downloads\CreditLedger;
 use App\Services\GetStocks\GetStocksClient;
@@ -47,6 +48,7 @@ class PollDownloadStatusJob implements ShouldQueue
 
         if ($download->poll_attempts > max(5, $settings->poll_max_attempts)) {
             $this->fail($download, 'Polling timed out waiting for upstream to be ready.', $ledger);
+
             return;
         }
 
@@ -60,6 +62,7 @@ class PollDownloadStatusJob implements ShouldQueue
             );
         } catch (GetStocksException $e) {
             $this->fail($download, $e->getMessage(), $ledger);
+
             return;
         }
 
@@ -80,6 +83,7 @@ class PollDownloadStatusJob implements ShouldQueue
             event(new DownloadStatusChanged($download));
 
             StreamDownloadFileJob::dispatch($download->id);
+
             return;
         }
 
@@ -99,7 +103,7 @@ class PollDownloadStatusJob implements ShouldQueue
             $ledger->credit(
                 user: $download->user,
                 amount: $download->credits_charged,
-                type: \App\Models\CreditTransaction::TYPE_REFUND,
+                type: CreditTransaction::TYPE_REFUND,
                 description: 'Auto refund: polling failed',
                 reference: $download,
             );

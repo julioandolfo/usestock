@@ -1,34 +1,51 @@
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
+import {
+    Sidebar,
+    SidebarContent,
+    SidebarFooter,
+    SidebarHeader,
+    SidebarMenu,
+    SidebarMenuButton,
+    SidebarMenuItem,
+} from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import {
+    CreditCard,
+    Download,
+    FileArchive,
+    Gauge,
+    LayoutGrid,
+    Package,
+    Settings,
+    ShieldCheck,
+    Tag,
+    Users,
+} from 'lucide-react';
 import AppLogo from './app-logo';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        url: '/dashboard',
-        icon: LayoutGrid,
-    },
+const userNavItems: NavItem[] = [
+    { title: 'Dashboard', url: '/dashboard', icon: LayoutGrid },
+    { title: 'Downloads', url: '/downloads', icon: Download },
+    { title: 'Biblioteca', url: '/library', icon: FileArchive },
+    { title: 'Créditos', url: '/billing', icon: CreditCard },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        url: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        url: 'https://laravel.com/docs/starter-kits',
-        icon: BookOpen,
-    },
+const adminNavItems: NavItem[] = [
+    { title: 'Visão geral', url: '/admin', icon: Gauge },
+    { title: 'Usuários', url: '/admin/users', icon: Users },
+    { title: 'Providers', url: '/admin/providers', icon: Tag },
+    { title: 'Regras de preço', url: '/admin/pricing', icon: ShieldCheck },
+    { title: 'Pacotes', url: '/admin/packages', icon: Package },
+    { title: 'Configurações', url: '/admin/settings', icon: Settings },
+    { title: 'Auditoria', url: '/admin/audit', icon: ShieldCheck },
 ];
 
 export function AppSidebar() {
+    const auth = usePage<{ auth?: { user?: { is_admin?: boolean } | null } }>().props.auth;
+    const isAdmin = !!auth?.user?.is_admin;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -44,11 +61,11 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={userNavItems} label="Plataforma" />
+                {isAdmin && <NavMain items={adminNavItems} label="Admin" />}
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

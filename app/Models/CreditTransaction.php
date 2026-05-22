@@ -12,11 +12,17 @@ class CreditTransaction extends Model
     use HasFactory;
 
     public const TYPE_PURCHASE = 'purchase';
+
     public const TYPE_ADMIN_CREDIT = 'admin_credit';
+
     public const TYPE_ADMIN_DEBIT = 'admin_debit';
+
     public const TYPE_DOWNLOAD_CHARGE = 'download_charge';
+
     public const TYPE_REFUND = 'refund';
+
     public const TYPE_BONUS = 'bonus';
+
     public const TYPE_ADJUSTMENT = 'adjustment';
 
     protected $fillable = [

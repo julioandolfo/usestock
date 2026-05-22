@@ -1,16 +1,18 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
+import { formatBytes, formatDate, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
-import { FormEventHandler, useState } from 'react';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { FormEventHandler, useCallback, useMemo, useState } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Downloads', href: '/downloads' },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Downloads', href: '/downloads' }];
 
 type Download = {
     id: number;
@@ -21,32 +23,63 @@ type Download = {
     status: string;
     file_name: string | null;
     file_size_bytes: number | null;
+    failure_reason: string | null;
+    ready_at: string | null;
     created_at: string;
 };
 
-type PageProps = {
+type Props = {
     downloads: {
         data: Download[];
+        links: { url: string | null; label: string; active: boolean }[];
     };
 };
 
-export default function DownloadsIndex({ downloads }: PageProps) {
+export default function DownloadsIndex({ downloads }: Props) {
     const [bulkText, setBulkText] = useState('');
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const [items, setItems] = useState<Download[]>(downloads.data);
+
+    const { setData, post, processing, errors, reset } = useForm({
         links: [] as string[],
-        is_premium: true,
-        zip: false,
+        is_premium: true as boolean,
+        zip: false as boolean,
     });
+
+    const onEvent = useCallback((event: DownloadEvent) => {
+        setItems((prev) => {
+            const idx = prev.findIndex((d) => d.public_id === event.id);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = {
+                ...next[idx],
+                status: event.status,
+                item_name: event.item_name ?? next[idx].item_name,
+                provider_slug: event.provider_slug ?? next[idx].provider_slug,
+                file_name: event.file_name ?? next[idx].file_name,
+                file_size_bytes: event.file_size_bytes ?? next[idx].file_size_bytes,
+                failure_reason: event.failure_reason ?? next[idx].failure_reason,
+                ready_at: event.ready_at ?? next[idx].ready_at,
+            };
+            return next;
+        });
+    }, []);
+    useDownloadEvents(onEvent);
+
+    const linkList = useMemo(
+        () =>
+            bulkText
+                .split(/\r?\n/)
+                .map((l) => l.trim())
+                .filter(Boolean),
+        [bulkText],
+    );
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        const links = bulkText
-            .split(/\r?\n/)
-            .map((l) => l.trim())
-            .filter(Boolean);
-        if (!links.length) return;
-        setData('links', links);
+        if (!linkList.length) return;
+        setData('links', linkList);
         post(route('downloads.store'), {
+            preserveScroll: true,
             onSuccess: () => {
                 setBulkText('');
                 reset('links');
@@ -62,35 +95,47 @@ export default function DownloadsIndex({ downloads }: PageProps) {
                     <CardHeader>
                         <CardTitle>Novo download</CardTitle>
                         <CardDescription>
-                            Cole um ou mais links (um por linha) e enfileire o download. Os créditos são reservados na hora.
+                            Um link por linha. Os créditos são reservados na hora — se um item falhar, o estorno é
+                            automático.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={submit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="links">Links</Label>
-                                <textarea
+                                <Textarea
                                     id="links"
-                                    className="min-h-[160px] w-full rounded-md border bg-background p-2 text-sm font-mono"
-                                    placeholder={'https://www.shutterstock.com/...\nhttps://www.freepik.com/...'}
+                                    rows={8}
                                     value={bulkText}
                                     onChange={(e) => setBulkText(e.target.value)}
+                                    placeholder={'https://www.shutterstock.com/...\nhttps://www.freepik.com/...'}
                                 />
-                                {errors.links && (
-                                    <p className="text-sm text-destructive">{errors.links}</p>
-                                )}
+                                {errors.links && <p className="text-sm text-destructive">{errors.links}</p>}
+                                <p className="text-xs text-muted-foreground">
+                                    {linkList.length} link(s) detectado(s)
+                                </p>
                             </div>
 
-                            <label className="flex items-center gap-2 text-sm">
-                                <input
-                                    type="checkbox"
-                                    checked={data.is_premium}
-                                    onChange={(e) => setData('is_premium', e.target.checked)}
+                            <div className="flex items-center justify-between rounded-md border p-3">
+                                <div>
+                                    <p className="text-sm font-medium">Conteúdo premium</p>
+                                    <p className="text-xs text-muted-foreground">Necessário para a maioria dos sites.</p>
+                                </div>
+                                <Switch
+                                    checked={true}
+                                    onCheckedChange={(v) => setData('is_premium', v)}
                                 />
-                                Conteúdo premium
-                            </label>
+                            </div>
 
-                            <Button type="submit" disabled={processing}>
+                            <div className="flex items-center justify-between rounded-md border p-3">
+                                <div>
+                                    <p className="text-sm font-medium">Gerar ZIP do lote</p>
+                                    <p className="text-xs text-muted-foreground">Empacota tudo após os itens ficarem prontos.</p>
+                                </div>
+                                <Switch onCheckedChange={(v) => setData('zip', v)} />
+                            </div>
+
+                            <Button type="submit" disabled={processing || !linkList.length} className="w-full">
                                 {processing ? 'Enfileirando…' : 'Iniciar download'}
                             </Button>
                         </form>
@@ -100,23 +145,55 @@ export default function DownloadsIndex({ downloads }: PageProps) {
                 <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle>Histórico recente</CardTitle>
-                        <CardDescription>Atualizações em tempo real conforme cada item é processado.</CardDescription>
+                        <CardDescription>Status em tempo real — atualiza sozinho conforme cada item progride.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                        {downloads.data.length === 0 && (
+                    <CardContent>
+                        {items.length === 0 ? (
                             <p className="text-sm text-muted-foreground">Nenhum download ainda.</p>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Item</TableHead>
+                                        <TableHead>Provider</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Tamanho</TableHead>
+                                        <TableHead>Quando</TableHead>
+                                        <TableHead></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {items.map((d) => (
+                                        <TableRow key={d.public_id}>
+                                            <TableCell className="max-w-xs">
+                                                <p className="truncate font-medium">{d.item_name || d.source_url}</p>
+                                                {d.failure_reason && (
+                                                    <p className="truncate text-xs text-destructive">{d.failure_reason}</p>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>{d.provider_slug || '—'}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'}>
+                                                    {STATUS_LABELS[d.status] ?? d.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-xs">{formatBytes(d.file_size_bytes)}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">
+                                                {formatDate(d.ready_at ?? d.created_at)}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Link
+                                                    href={route('downloads.show', d.public_id)}
+                                                    className="text-xs text-primary hover:underline"
+                                                >
+                                                    Detalhes
+                                                </Link>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         )}
-                        {downloads.data.map((d) => (
-                            <div key={d.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                                <div className="min-w-0">
-                                    <p className="truncate font-medium">{d.item_name || d.source_url}</p>
-                                    <p className="truncate text-xs text-muted-foreground">{d.provider_slug || '—'}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Badge variant={d.status === 'ready' ? 'default' : 'secondary'}>{d.status}</Badge>
-                                </div>
-                            </div>
-                        ))}
                     </CardContent>
                 </Card>
             </div>

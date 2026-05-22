@@ -162,9 +162,9 @@ class GetStocksClient
         $token = $this->ensureToken();
 
         return rtrim($this->settings->base_url, '/')
-            . '/api/v1/download/'
-            . urlencode($itemDCode)
-            . '?token=' . urlencode($token);
+            .'/api/v1/download/'
+            .urlencode($itemDCode)
+            .'?token='.urlencode($token);
     }
 
     /**
@@ -178,7 +178,7 @@ class GetStocksClient
             ->timeout(0)
             ->connectTimeout(15)
             ->withHeaders($this->authHeaders())
-            ->get('/api/v1/download/' . urlencode($itemDCode), [
+            ->get('/api/v1/download/'.urlencode($itemDCode), [
                 'token' => $this->ensureToken(),
             ]);
     }
@@ -249,7 +249,7 @@ class GetStocksClient
     private function authHeaders(): array
     {
         return [
-            'Authorization' => 'Bearer ' . $this->ensureToken(),
+            'Authorization' => 'Bearer '.$this->ensureToken(),
         ];
     }
 
@@ -290,7 +290,7 @@ class GetStocksClient
                 'error' => $response->failed() ? $response->reason() : null,
             ]);
         } catch (\Throwable $e) {
-            Log::warning('GetstocksApiLog persist failed: ' . $e->getMessage());
+            Log::warning('GetstocksApiLog persist failed: '.$e->getMessage());
         }
     }
 

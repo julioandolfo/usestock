@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureNotInstalled;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ThrottleDownloads;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'installed' => EnsureInstalled::class,
             'not_installed' => EnsureNotInstalled::class,
+            'throttle_downloads' => ThrottleDownloads::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [
