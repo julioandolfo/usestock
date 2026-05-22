@@ -107,6 +107,19 @@ class StreamDownloadFileJob implements ShouldQueue
                 return;
             }
 
+            // Video formats are always wrapped in a ZIP so the browser never
+            // tries to preview them inline and the user always gets a clean
+            // archive instead of a raw video file.
+            if ($this->shouldWrapInZip($download)) {
+                [$relativePath, $filename, $bytes] = $this->wrapInZip(
+                    $disk,
+                    $absolutePath,
+                    $relativePath,
+                    $filename,
+                );
+                $download->file_extension = 'zip';
+            }
+
             $download->fill([
                 'storage_path' => $relativePath,
                 'file_name' => $filename,
@@ -204,5 +217,69 @@ class StreamDownloadFileJob implements ShouldQueue
         if ($batch->zip_requested && $ok > 0 && ! $batch->zip_path) {
             BuildBatchZipJob::dispatch($batch->id);
         }
+    }
+
+    /**
+     * Whether the just-downloaded file is a video that we want to ship
+     * wrapped in a ZIP instead of raw. Triggers off the file extension —
+     * the upstream provider always names video downloads with the right
+     * suffix (`.mp4`, `.mov`).
+     */
+    private function shouldWrapInZip(DownloadRequest $download): bool
+    {
+        $ext = strtolower((string) $download->file_extension);
+
+        return in_array($ext, ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', 'mpg', 'mpeg'], true);
+    }
+
+    /**
+     * Repack the file on disk as a ZIP, swap the storage_path / file_name
+     * with the archive, and return the new (path, name, size) tuple. The
+     * original raw video is removed.
+     */
+    private function wrapInZip(
+        \Illuminate\Contracts\Filesystem\Filesystem $disk,
+        string $sourceAbsolute,
+        string $sourceRelative,
+        string $originalName,
+    ): array {
+        $base = pathinfo($originalName, PATHINFO_FILENAME) ?: 'video';
+        $relativeZip = pathinfo($sourceRelative, PATHINFO_DIRNAME).'/'.$base.'.zip';
+
+        // Ensure the directory exists and the zip path is fresh.
+        $disk->put($relativeZip, '');
+        $absoluteZip = $disk->path($relativeZip);
+        @unlink($absoluteZip);
+
+        $zip = new \ZipArchive;
+        if ($zip->open($absoluteZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            \Illuminate\Support\Facades\Log::warning('Failed to open ZipArchive for video wrap', [
+                'source' => $sourceRelative,
+                'target' => $relativeZip,
+            ]);
+
+            // Fall back to serving the raw file if zipping fails — better
+            // than blocking the download entirely.
+            return [$sourceRelative, $originalName, filesize($sourceAbsolute) ?: 0];
+        }
+
+        // STORE method: don't recompress (videos are already compressed and
+        // recompression would burn CPU for ~0% gain).
+        $zip->addFile($sourceAbsolute, $originalName);
+        $zip->setCompressionName($originalName, \ZipArchive::CM_STORE);
+        $zip->close();
+
+        // Verify the zip was written before deleting the original.
+        if (! file_exists($absoluteZip) || filesize($absoluteZip) === 0) {
+            \Illuminate\Support\Facades\Log::warning('Generated zip is empty, keeping raw file', [
+                'source' => $sourceRelative,
+            ]);
+
+            return [$sourceRelative, $originalName, filesize($sourceAbsolute) ?: 0];
+        }
+
+        @unlink($sourceAbsolute);
+
+        return [$relativeZip, $base.'.zip', filesize($absoluteZip)];
     }
 }
