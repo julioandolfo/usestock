@@ -86,9 +86,6 @@ services:
 
   worker:
     image: ${APP_IMAGE:-ghcr.io/julioandolfo/usestock:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
     command: ["worker"]
     restart: unless-stopped
     environment:
@@ -110,9 +107,6 @@ services:
 
   scheduler:
     image: ${APP_IMAGE:-ghcr.io/julioandolfo/usestock:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
     command: ["scheduler"]
     restart: unless-stopped
     environment:
@@ -126,9 +120,6 @@ services:
 
   reverb:
     image: ${APP_IMAGE:-ghcr.io/julioandolfo/usestock:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
     command: ["reverb"]
     restart: unless-stopped
     environment:
