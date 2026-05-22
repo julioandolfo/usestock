@@ -220,12 +220,23 @@ export default function DownloadsIndex({ downloads }: Props) {
                                                 {formatDate(d.ready_at ?? d.created_at)}
                                             </TableCell>
                                             <TableCell>
-                                                <Link
-                                                    href={route('downloads.show', d.public_id)}
-                                                    className="text-xs text-primary hover:underline"
-                                                >
-                                                    Detalhes
-                                                </Link>
+                                                <div className="flex items-center gap-3">
+                                                    {d.status === 'ready' && (
+                                                        <a
+                                                            href={route('library.file', d.public_id)}
+                                                            className="text-xs font-medium text-primary hover:underline"
+                                                            download
+                                                        >
+                                                            Baixar
+                                                        </a>
+                                                    )}
+                                                    <Link
+                                                        href={route('downloads.show', d.public_id)}
+                                                        className="text-xs text-muted-foreground hover:underline"
+                                                    >
+                                                        Detalhes
+                                                    </Link>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}

@@ -70,21 +70,41 @@ class StreamDownloadFileJob implements ShouldQueue
             $body = $response->toPsrResponse()->getBody();
             $bytes = 0;
 
-            // Write in chunks so memory stays flat for large files.
-            $disk->put($relativePath, ''); // ensure directory exists / file truncated
+            // Make sure the parent directory exists, then truncate the destination.
+            $disk->put($relativePath, '');
             $absolutePath = $disk->path($relativePath);
             $handle = fopen($absolutePath, 'wb');
+            if ($handle === false) {
+                $this->fail($download, 'Unable to open destination file for writing.', $ledger);
+
+                return;
+            }
+
             try {
                 while (! $body->eof()) {
                     $chunk = $body->read(1024 * 1024);
                     if ($chunk === '') {
                         continue;
                     }
-                    fwrite($handle, $chunk);
-                    $bytes += strlen($chunk);
+                    $written = fwrite($handle, $chunk);
+                    if ($written === false) {
+                        throw new \RuntimeException('fwrite failed mid-stream');
+                    }
+                    $bytes += $written;
                 }
+                fflush($handle);
             } finally {
                 fclose($handle);
+            }
+
+            // Sanity check: if upstream gave us nothing, treat it as a failure
+            // instead of marking READY with a 0-byte file (which causes Chrome's
+            // "Falha - Arquivo incompleto" on the user side).
+            if ($bytes === 0 || ! file_exists($absolutePath) || filesize($absolutePath) === 0) {
+                @unlink($absolutePath);
+                $this->fail($download, 'Upstream returned an empty file.', $ledger);
+
+                return;
             }
 
             $download->fill([
