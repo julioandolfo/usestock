@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { formatBRL } from '@/lib/format';
 import { Head, Link, usePage } from '@inertiajs/react';
@@ -50,29 +51,30 @@ export default function Welcome({
 
             {/* Header */}
             <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur">
-                <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+                <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
                     <Link href="/" className="flex items-center gap-2">
                         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                             <AppLogoIcon className="size-4 fill-current" />
                         </div>
                         <span className="text-lg font-semibold">{brand}</span>
                     </Link>
-                    <nav className="flex items-center gap-3">
+                    <nav className="flex items-center gap-2 sm:gap-3">
+                        <AppearanceToggleDropdown className="hidden sm:flex" />
                         {user ? (
                             <>
-                                <span className="hidden text-sm text-muted-foreground sm:inline">
+                                <span className="hidden text-sm text-muted-foreground md:inline">
                                     Olá, {user.name.split(' ')[0]}
                                 </span>
-                                <Button asChild>
+                                <Button asChild size="sm" className="sm:size-default">
                                     <Link href={route('dashboard')}>Acessar painel</Link>
                                 </Button>
                             </>
                         ) : (
                             <>
-                                <Button asChild variant="ghost">
+                                <Button asChild variant="ghost" size="sm" className="sm:size-default">
                                     <Link href={route('login')}>Entrar</Link>
                                 </Button>
-                                <Button asChild>
+                                <Button asChild size="sm" className="sm:size-default">
                                     <Link href={route('register')}>Criar conta</Link>
                                 </Button>
                             </>
@@ -82,7 +84,7 @@ export default function Welcome({
             </header>
 
             {/* Hero */}
-            <section className="mx-auto max-w-6xl px-6 py-16 md:py-24">
+            <section className="mx-auto max-w-6xl px-4 sm:px-6 py-16 md:py-24">
                 <div className="mx-auto max-w-3xl text-center">
                     <Badge variant="outline" className="mb-6">
                         <Sparkles className="mr-1 size-3" />
@@ -121,7 +123,7 @@ export default function Welcome({
             </section>
 
             {/* Como funciona */}
-            <section className="mx-auto max-w-6xl px-6 pb-16">
+            <section className="mx-auto max-w-6xl px-4 sm:px-6 pb-16">
                 <div className="mb-10 text-center">
                     <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Como funciona</h2>
                     <p className="mt-3 text-muted-foreground">Três passos. Sem fricção.</p>
@@ -151,7 +153,7 @@ export default function Welcome({
             {/* Providers */}
             {providers.length > 0 && (
                 <section className="border-y border-border/40 bg-muted/30 py-16">
-                    <div className="mx-auto max-w-6xl px-6">
+                    <div className="mx-auto max-w-6xl px-4 sm:px-6">
                         <div className="mb-8 text-center">
                             <h2 className="text-2xl font-bold md:text-3xl">Bancos suportados</h2>
                             <p className="mt-2 text-muted-foreground">
@@ -178,7 +180,7 @@ export default function Welcome({
             )}
 
             {/* Benefícios */}
-            <section className="mx-auto max-w-6xl px-6 py-16">
+            <section className="mx-auto max-w-6xl px-4 sm:px-6 py-16">
                 <div className="mb-10 text-center">
                     <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Feito para quem produz conteúdo</h2>
                 </div>
@@ -219,7 +221,7 @@ export default function Welcome({
             {/* Pacotes */}
             {packages.length > 0 && (
                 <section className="border-t border-border/40 bg-muted/30 py-16">
-                    <div className="mx-auto max-w-6xl px-6">
+                    <div className="mx-auto max-w-6xl px-4 sm:px-6">
                         <div className="mb-10 text-center">
                             <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Comece com o pacote ideal</h2>
                             <p className="mt-3 text-muted-foreground">
@@ -260,7 +262,7 @@ export default function Welcome({
             )}
 
             {/* FAQ */}
-            <section className="mx-auto max-w-3xl px-6 py-16">
+            <section className="mx-auto max-w-3xl px-4 sm:px-6 py-16">
                 <div className="mb-10 text-center">
                     <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Perguntas frequentes</h2>
                 </div>
@@ -294,7 +296,7 @@ export default function Welcome({
 
             {/* CTA final */}
             <section className="border-t border-border/40 bg-primary/5">
-                <div className="mx-auto max-w-3xl px-6 py-16 text-center">
+                <div className="mx-auto max-w-3xl px-4 sm:px-6 py-16 text-center">
                     <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Pronto para começar?</h2>
                     <p className="mt-3 text-muted-foreground">
                         Crie sua conta em menos de um minuto. Sem cartão de crédito necessário para registrar.
@@ -320,7 +322,7 @@ export default function Welcome({
 
             {/* Footer */}
             <footer className="border-t border-border/40 py-8">
-                <div className="mx-auto max-w-6xl px-6 text-center text-xs text-muted-foreground">
+                <div className="mx-auto max-w-6xl px-4 sm:px-6 text-center text-xs text-muted-foreground">
                     <p>© {new Date().getFullYear()} {brand}. Todos os direitos reservados.</p>
                 </div>
             </footer>

@@ -203,16 +203,16 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard" />
 
-            <div className="space-y-6 p-4">
+            <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
                 {/* Welcome banner */}
                 <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary/90 to-primary/70 text-primary-foreground">
-                    <CardContent className="flex flex-wrap items-center justify-between gap-4 p-6">
+                    <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6">
                         <div>
                             <div className="flex items-center gap-2 text-sm opacity-90">
                                 <Sparkles className="size-4" />
                                 Bem-vindo de volta
                             </div>
-                            <h2 className="mt-1 text-2xl font-bold">
+                            <h2 className="mt-1 text-xl font-bold sm:text-2xl">
                                 Você tem {formatNumber(balance)} crédito{balance === 1 ? '' : 's'} disponível{balance === 1 ? '' : 'eis'}
                             </h2>
                             <p className="mt-1 text-sm opacity-90">
@@ -231,7 +231,7 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                 </Card>
 
                 {/* Stats cards */}
-                <div className="grid gap-4 md:grid-cols-4">
+                <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
                     <StatCard
                         icon={<Coins className="size-4" />}
                         label="Saldo de créditos"
