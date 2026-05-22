@@ -70,6 +70,7 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
     const [wantZip, setWantZip] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [errors, setErrors] = useState<{ links?: string }>({});
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
     const linkList = useMemo(
         () =>
@@ -105,12 +106,19 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
         if (!linkList.length) return;
         setProcessing(true);
         setErrors({});
+        setSuccessMsg(null);
+        const n = linkList.length;
         router.post(
             route('downloads.store'),
             { links: linkList, is_premium: isPremium, zip: wantZip },
             {
                 preserveScroll: true,
-                onSuccess: () => setBulkText(''),
+                preserveState: true,
+                onSuccess: () => {
+                    setBulkText('');
+                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enviado${n === 1 ? '' : 's'} para a fila. Acompanhe abaixo.`);
+                    setTimeout(() => setSuccessMsg(null), 6000);
+                },
                 onError: (errs) => setErrors(errs as { links?: string }),
                 onFinish: () => setProcessing(false),
             },
@@ -198,6 +206,17 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                             </div>
                         </CardHeader>
                         <CardContent>
+                            {successMsg && (
+                                <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                                    <CheckCircle2 className="size-4" />
+                                    {successMsg}
+                                </div>
+                            )}
+                            {errors.links && (
+                                <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                    {errors.links}
+                                </div>
+                            )}
                             <form onSubmit={submit} className="space-y-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="quick-links">Links</Label>

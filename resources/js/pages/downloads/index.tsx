@@ -43,6 +43,7 @@ export default function DownloadsIndex({ downloads }: Props) {
     const [wantZip, setWantZip] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [errors, setErrors] = useState<{ links?: string }>({});
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
     const onEvent = useCallback((event: DownloadEvent) => {
         setItems((prev) => {
@@ -78,12 +79,19 @@ export default function DownloadsIndex({ downloads }: Props) {
         if (!linkList.length) return;
         setProcessing(true);
         setErrors({});
+        setSuccessMsg(null);
+        const n = linkList.length;
         router.post(
             route('downloads.store'),
             { links: linkList, is_premium: isPremium, zip: wantZip },
             {
                 preserveScroll: true,
-                onSuccess: () => setBulkText(''),
+                preserveState: true,
+                onSuccess: () => {
+                    setBulkText('');
+                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enfileirado${n === 1 ? '' : 's'}. O status aparece abaixo em tempo real.`);
+                    setTimeout(() => setSuccessMsg(null), 6000);
+                },
                 onError: (errs) => setErrors(errs as { links?: string }),
                 onFinish: () => setProcessing(false),
             },
@@ -103,6 +111,16 @@ export default function DownloadsIndex({ downloads }: Props) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
+                        {successMsg && (
+                            <div className="mb-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                                {successMsg}
+                            </div>
+                        )}
+                        {errors.links && (
+                            <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                {errors.links}
+                            </div>
+                        )}
                         <form onSubmit={submit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="links">Links</Label>
