@@ -29,6 +29,7 @@ class SettingsController extends Controller
             'general' => [
                 'brand_name' => $general->brand_name,
                 'support_email' => $general->support_email,
+                'support_whatsapp' => $general->support_whatsapp,
                 'primary_color' => $general->primary_color,
                 'allow_registration' => $general->allow_registration,
                 'require_email_verification' => $general->require_email_verification,
@@ -74,10 +75,21 @@ class SettingsController extends Controller
         $data = $request->validate([
             'brand_name' => ['required', 'string', 'max:120'],
             'support_email' => ['required', 'email'],
+            'support_whatsapp' => ['nullable', 'string', 'max:20'],
             'primary_color' => ['required', 'string', 'max:9'],
             'allow_registration' => ['required', 'boolean'],
             'require_email_verification' => ['required', 'boolean'],
         ]);
+
+        // Strip everything that isn't a digit so wa.me links work regardless
+        // of how the admin formats the number ("(35) 99180-3209" → "5535991803209").
+        if (! empty($data['support_whatsapp'])) {
+            $digits = preg_replace('/\D+/', '', $data['support_whatsapp']);
+            if ($digits && strlen($digits) <= 11) {
+                $digits = '55'.$digits;
+            }
+            $data['support_whatsapp'] = $digits ?: null;
+        }
 
         foreach ($data as $k => $v) {
             $settings->{$k} = $v;
