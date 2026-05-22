@@ -7,10 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
-import { formatBytes, formatDate, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { formatBytes, formatDate, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { Loader2 } from 'lucide-react';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { FormEventHandler, useCallback, useMemo, useState } from 'react';
+import { FormEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Downloads', href: '/downloads' }];
 
@@ -65,6 +66,20 @@ export default function DownloadsIndex({ downloads }: Props) {
     }, []);
     useDownloadEvents(onEvent);
 
+    // Sync `items` whenever the server re-renders with fresh recentDownloads.
+    useEffect(() => {
+        setItems((prev) => {
+            const byId = new Map(prev.map((p) => [p.public_id, p]));
+            const merged = downloads.data.map((fresh) => byId.get(fresh.public_id) ?? fresh);
+            for (const local of prev) {
+                if (!merged.find((d) => d.public_id === local.public_id)) {
+                    merged.push(local);
+                }
+            }
+            return merged;
+        });
+    }, [downloads.data]);
+
     const linkList = useMemo(
         () =>
             bulkText
@@ -89,8 +104,9 @@ export default function DownloadsIndex({ downloads }: Props) {
                 preserveState: true,
                 onSuccess: () => {
                     setBulkText('');
-                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enfileirado${n === 1 ? '' : 's'}. O status aparece abaixo em tempo real.`);
+                    setSuccessMsg(`${n} link${n === 1 ? '' : 's'} enfileirado${n === 1 ? '' : 's'}. O status aparece em tempo real.`);
                     setTimeout(() => setSuccessMsg(null), 6000);
+                    router.reload({ only: ['downloads'] });
                 },
                 onError: (errs) => setErrors(errs as { links?: string }),
                 onFinish: () => setProcessing(false),
@@ -191,7 +207,10 @@ export default function DownloadsIndex({ downloads }: Props) {
                                             </TableCell>
                                             <TableCell>{d.provider_slug || '—'}</TableCell>
                                             <TableCell>
-                                                <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'}>
+                                                <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'} className="gap-1.5">
+                                                    {isInProgress(d.status) && (
+                                                        <Loader2 className="size-3 animate-spin" />
+                                                    )}
                                                     {STATUS_LABELS[d.status] ?? d.status}
                                                 </Badge>
                                             </TableCell>
