@@ -1,0 +1,185 @@
+# =====================================================================
+# UseStock — Coolify-ready docker-compose
+# ---------------------------------------------------------------------
+# Deploy: paste this file into Coolify as a "Docker Compose" resource.
+# Coolify auto-provides:
+#   - SERVICE_FQDN_APP_80     -> public domain bound to the `app` service
+#   - Volumes are persisted by Coolify
+# Only secrets need to be filled in Coolify UI:
+#   - SERVICE_PASSWORD_POSTGRES
+#   - SERVICE_PASSWORD_REDIS
+#   - APP_KEY  (optional — auto-generated on first boot otherwise)
+# Everything else has sane defaults baked-in.
+# =====================================================================
+
+x-app-env: &app-env
+  APP_NAME: "UseStock"
+  APP_ENV: "production"
+  APP_DEBUG: "false"
+  APP_URL: "${SERVICE_FQDN_APP:-http://localhost}"
+  APP_KEY: "${APP_KEY:-}"
+
+  LOG_CHANNEL: "stack"
+  LOG_STACK: "single"
+  LOG_LEVEL: "info"
+
+  DB_CONNECTION: "pgsql"
+  DB_HOST: "db"
+  DB_PORT: "5432"
+  DB_DATABASE: "usestock"
+  DB_USERNAME: "usestock"
+  DB_PASSWORD: "${SERVICE_PASSWORD_POSTGRES:?set SERVICE_PASSWORD_POSTGRES in Coolify}"
+
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
+  REDIS_CLIENT: "predis"
+
+  CACHE_STORE: "redis"
+  SESSION_DRIVER: "redis"
+  SESSION_LIFETIME: "120"
+  QUEUE_CONNECTION: "redis"
+
+  FILESYSTEM_DISK: "local"
+  DOWNLOADS_DISK: "downloads"
+
+  BROADCAST_CONNECTION: "reverb"
+  REVERB_APP_ID: "usestock"
+  REVERB_APP_KEY: "usestock-public-key"
+  REVERB_APP_SECRET: "${SERVICE_PASSWORD_REVERB:-${SERVICE_PASSWORD_REDIS}}"
+  REVERB_HOST: "reverb"
+  REVERB_PORT: "8080"
+  REVERB_SCHEME: "http"
+
+  MAIL_MAILER: "log"   # overridden by admin panel once Resend key is set in DB
+
+  TRUSTED_PROXIES: "*"
+
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/julioandolfo/usestock:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["app"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    volumes:
+      - app_storage:/var/www/html/storage
+      - app_downloads:/var/www/html/storage/app/downloads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      - "coolify.managed=true"
+    expose:
+      - "80"
+
+  worker:
+    image: ${APP_IMAGE:-ghcr.io/julioandolfo/usestock:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["worker"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    volumes:
+      - app_storage:/var/www/html/storage
+      - app_downloads:/var/www/html/storage/app/downloads
+    depends_on:
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'horizon' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  scheduler:
+    image: ${APP_IMAGE:-ghcr.io/julioandolfo/usestock:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["scheduler"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    volumes:
+      - app_storage:/var/www/html/storage
+      - app_downloads:/var/www/html/storage/app/downloads
+    depends_on:
+      app:
+        condition: service_healthy
+
+  reverb:
+    image: ${APP_IMAGE:-ghcr.io/julioandolfo/usestock:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["reverb"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    depends_on:
+      app:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "usestock"
+      POSTGRES_USER: "usestock"
+      POSTGRES_PASSWORD: "${SERVICE_PASSWORD_POSTGRES:?set SERVICE_PASSWORD_POSTGRES in Coolify}"
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U usestock -d usestock"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--requirepass"
+      - "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${SERVICE_PASSWORD_REDIS}", "PING"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    expose:
+      - "6379"
+
+volumes:
+  app_storage:
+  app_downloads:
+  db_data:
+  redis_data:
