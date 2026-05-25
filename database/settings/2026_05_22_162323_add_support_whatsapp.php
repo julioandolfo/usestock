@@ -6,6 +6,6 @@ return new class extends SettingsMigration
 {
     public function up(): void
     {
-        $this->migrator->add('general.support_whatsapp', '5535991803209');
+        $this->migrator->add('general.support_whatsapp', '5535992697570');
     }
 };
