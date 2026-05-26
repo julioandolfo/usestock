@@ -39,6 +39,14 @@ mkdir -p \
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R ug+rwX storage bootstrap/cache 2>/dev/null || true
 
+# Normalise downloaded-file permissions so PHP-FPM (www-data) can always
+# read files the queue worker may have written as root: dirs 0755, files 0644.
+# Fixes legacy 0600/0700 root-only files from before this was enforced.
+if [[ -d storage/app/downloads ]]; then
+    find storage/app/downloads -type d -exec chmod 0755 {} + 2>/dev/null || true
+    find storage/app/downloads -type f -exec chmod 0644 {} + 2>/dev/null || true
+fi
+
 # Ensure storage symlink exists
 if [[ ! -L public/storage ]]; then
     php artisan storage:link --force >/dev/null 2>&1 || true

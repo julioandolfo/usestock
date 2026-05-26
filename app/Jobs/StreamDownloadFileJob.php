@@ -120,6 +120,13 @@ class StreamDownloadFileJob implements ShouldQueue
                 $download->file_extension = 'zip';
             }
 
+            // The worker may run as root while PHP-FPM serves as www-data.
+            // Force the final file to 0644 + every dir up to the downloads
+            // root to 0755 so the web process can traverse + read regardless
+            // of the writer's umask/owner. Without this the file is 0600/0700
+            // root-only and the serve route reports "file not found".
+            $this->makeReadable($disk, $disk->path($relativePath));
+
             $download->fill([
                 'storage_path' => $relativePath,
                 'file_name' => $filename,
@@ -229,6 +236,27 @@ class StreamDownloadFileJob implements ShouldQueue
 
         if ($batch->zip_requested && $ok > 0 && ! $batch->zip_path) {
             BuildBatchZipJob::dispatch($batch->id);
+        }
+    }
+
+    /**
+     * Make the stored file world-readable and every ancestor directory up to
+     * the disk root traversable, so PHP-FPM (www-data) can serve a file that
+     * the queue worker may have written as root.
+     */
+    private function makeReadable(\Illuminate\Contracts\Filesystem\Filesystem $disk, string $absoluteFile): void
+    {
+        @chmod($absoluteFile, 0644);
+
+        $root = rtrim($disk->path(''), '/');
+        $dir = dirname($absoluteFile);
+        // Walk up from the file's directory to the downloads root.
+        while ($dir && str_starts_with($dir, $root) && strlen($dir) >= strlen($root)) {
+            @chmod($dir, 0755);
+            if ($dir === $root) {
+                break;
+            }
+            $dir = dirname($dir);
         }
     }
 
