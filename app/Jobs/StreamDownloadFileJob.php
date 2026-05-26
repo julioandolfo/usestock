@@ -130,6 +130,19 @@ class StreamDownloadFileJob implements ShouldQueue
                 'expires_at' => now()->addDays(max(1, $settings->file_ttl_days)),
             ])->save();
 
+            // Diagnostic: record where (host + absolute path) the worker wrote
+            // the file. If FileServeController later logs a "not found" for the
+            // same relative path on a different host, that's a smoking gun for
+            // a volume that isn't shared between worker and web containers.
+            \Illuminate\Support\Facades\Log::info('Download stored', [
+                'download_id' => $download->id,
+                'public_id' => $download->public_id,
+                'hostname' => gethostname(),
+                'relative_path' => $relativePath,
+                'absolute_path' => $disk->path($relativePath),
+                'bytes' => $bytes,
+            ]);
+
             event(new DownloadStatusChanged($download));
 
             $this->maybeFinalizeBatch($download);

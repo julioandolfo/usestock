@@ -38,21 +38,28 @@ class FileServeController extends Controller
         $relativePath = $download->storage_path;
 
         if (! $relativePath || ! $disk->exists($relativePath)) {
-            Log::warning('FileServe: missing path on disk', [
+            // Rich diagnostic so we can tell a cross-container volume issue
+            // (worker wrote the file, web can't see it) apart from a genuine
+            // deletion. Logs the host, the absolute path we looked at, whether
+            // the parent dir exists, and a sample of what IS in that dir.
+            $absolute = $relativePath ? $disk->path($relativePath) : null;
+            $dir = $absolute ? dirname($absolute) : null;
+            Log::warning('FileServe: file not found on this container', [
                 'download_id' => $download->id,
-                'path' => $relativePath,
-                'disk' => $download->storage_disk,
+                'public_id' => $download->public_id,
+                'hostname' => gethostname(),
+                'relative_path' => $relativePath,
+                'absolute_path' => $absolute,
+                'dir_exists' => $dir ? is_dir($dir) : null,
+                'dir_sample' => ($dir && is_dir($dir)) ? array_slice(array_values(array_diff(scandir($dir) ?: [], ['.', '..'])), 0, 10) : [],
             ]);
 
-            // Self-heal: the file vanished from disk (manual cleanup, volume
-            // reset, etc.) but the row still says ready. Mark expired so the
-            // UI stops offering a broken download button.
-            $download->update([
-                'status' => DownloadRequest::STATUS_EXPIRED,
-                'storage_path' => null,
-            ]);
-
-            return $this->errorResponse(404, 'Arquivo não encontrado no servidor. Tente baixar novamente.');
+            // IMPORTANT: do NOT mutate the row to expired here. If the cause is
+            // a volume that isn't shared between worker and web (or a not-yet
+            // persistent volume), the file may actually still exist elsewhere
+            // and destroying the row would lose it permanently. Genuine TTL
+            // expiry is handled by CleanExpiredDownloadsJob. We just report.
+            return $this->errorResponse(404, 'Arquivo temporariamente indisponível. Se persistir, refaça o download.');
         }
 
         $absolutePath = $disk->path($relativePath);
