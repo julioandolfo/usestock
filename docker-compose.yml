@@ -4,12 +4,19 @@
 # Deploy: paste this file into Coolify as a "Docker Compose" resource.
 # Coolify auto-provides:
 #   - SERVICE_FQDN_APP_80     -> public domain bound to the `app` service
-#   - Volumes are persisted by Coolify
 # Only secrets need to be filled in Coolify UI:
 #   - SERVICE_PASSWORD_POSTGRES
 #   - SERVICE_PASSWORD_REDIS
 #   - APP_KEY  (optional — auto-generated on first boot otherwise)
 # Everything else has sane defaults baked-in.
+#
+# ⚠️  PERSISTENT STORAGE — IMPORTANT
+# The named volumes below (app_storage, db_data, redis_data) MUST be marked
+# as Persistent in Coolify (Storages tab). app_storage holds the downloaded
+# files under storage/app/downloads — if it is recreated on each deploy, all
+# previously downloaded files vanish and the library shows them as expired.
+# A single storage volume is shared by app + worker + scheduler so the file
+# the worker writes is the same file the web serves.
 # =====================================================================
 
 x-app-env: &app-env
@@ -69,7 +76,6 @@ services:
       <<: *app-env
     volumes:
       - app_storage:/var/www/html/storage
-      - app_downloads:/var/www/html/storage/app/downloads
     depends_on:
       db:
         condition: service_healthy
@@ -94,7 +100,6 @@ services:
       <<: *app-env
     volumes:
       - app_storage:/var/www/html/storage
-      - app_downloads:/var/www/html/storage/app/downloads
     depends_on:
       app:
         condition: service_healthy
@@ -115,7 +120,6 @@ services:
       <<: *app-env
     volumes:
       - app_storage:/var/www/html/storage
-      - app_downloads:/var/www/html/storage/app/downloads
     depends_on:
       app:
         condition: service_healthy
@@ -173,6 +177,5 @@ services:
 
 volumes:
   app_storage:
-  app_downloads:
   db_data:
   redis_data:
