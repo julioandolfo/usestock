@@ -46,11 +46,17 @@ return [
         ],
 
         // Long-term storage for files downloaded from upstream providers.
-        // Served only via signed URLs / streamed responses — never publicly listed.
+        // Served only through FileServeController (auth + ownership) — never
+        // exposed under a public web path. Permissions are set so files written
+        // by the queue worker (which may run as root) stay readable by the
+        // PHP-FPM process (www-data) that serves them: 0644 files, 0755 dirs.
         'downloads' => [
             'driver' => 'local',
             'root' => storage_path('app/downloads'),
-            'visibility' => 'private',
+            'permissions' => [
+                'file' => ['public' => 0644, 'private' => 0644],
+                'dir' => ['public' => 0755, 'private' => 0755],
+            ],
             'throw' => false,
         ],
 

@@ -9,6 +9,7 @@ import AppLayout from '@/layouts/app-layout';
 import { formatDate, formatNumber, formatPhoneMask } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
+import { Minus, Plus } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 type Role = { id: number; name: string };
@@ -61,8 +62,10 @@ export default function UserShow({ user, transactions, downloads }: Props) {
 
     const isAdmin = user.roles.some((r) => r.name === 'admin');
 
-    const submitCredits: FormEventHandler = (e) => {
-        e.preventDefault();
+    const applyCredits = (direction: 1 | -1) => {
+        const magnitude = Math.abs(Number(credits.data.amount) || 0);
+        if (magnitude === 0) return;
+        credits.transform((d) => ({ ...d, amount: magnitude * direction }));
         credits.post(route('admin.users.credits', user.id), { preserveScroll: true });
     };
 
@@ -199,17 +202,27 @@ export default function UserShow({ user, transactions, downloads }: Props) {
                 <Card className="lg:col-span-3">
                     <CardHeader>
                         <CardTitle>Ajustar créditos</CardTitle>
-                        <CardDescription>Use valores positivos para creditar e negativos para debitar.</CardDescription>
+                        <CardDescription>
+                            Saldo atual: <span className="font-semibold text-foreground">{formatNumber(user.credits_balance)}</span> créditos.
+                            Informe a quantidade e escolha adicionar ou remover.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <form onSubmit={submitCredits} className="grid gap-3 md:grid-cols-3">
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                applyCredits(1);
+                            }}
+                            className="grid gap-3 md:grid-cols-3"
+                        >
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Quantidade</Label>
                                 <Input
                                     id="amount"
                                     type="number"
+                                    min={1}
                                     value={credits.data.amount}
-                                    onChange={(e) => credits.setData('amount', parseInt(e.target.value || '0', 10))}
+                                    onChange={(e) => credits.setData('amount', Math.abs(parseInt(e.target.value || '0', 10)))}
                                 />
                                 <InputError message={credits.errors.amount} />
                             </div>
@@ -219,11 +232,29 @@ export default function UserShow({ user, transactions, downloads }: Props) {
                                     id="description"
                                     value={credits.data.description}
                                     onChange={(e) => credits.setData('description', e.target.value)}
+                                    placeholder="Ex.: bônus promocional, estorno, correção…"
                                 />
                             </div>
-                            <Button type="submit" disabled={credits.processing} className="md:col-span-3">
-                                Aplicar
-                            </Button>
+                            <div className="flex gap-2 md:col-span-3">
+                                <Button
+                                    type="submit"
+                                    disabled={credits.processing}
+                                    className="flex-1 bg-emerald-600 text-white hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                                >
+                                    <Plus className="mr-2 size-4" />
+                                    Adicionar créditos
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={credits.processing}
+                                    className="flex-1"
+                                    onClick={() => applyCredits(-1)}
+                                >
+                                    <Minus className="mr-2 size-4" />
+                                    Remover créditos
+                                </Button>
+                            </div>
                         </form>
                     </CardContent>
                 </Card>
