@@ -67,6 +67,21 @@ class StreamDownloadFileJob implements ShouldQueue
                 return;
             }
 
+            // Upstream sometimes returns 200 with an HTML error page or a JSON
+            // error envelope (captcha, link unsupported, expired token, etc.).
+            // Detecting that here prevents writing an HTML page to disk and
+            // serving it later as a bogus "file.html" download.
+            $upstreamType = strtolower((string) $response->header('Content-Type'));
+            if (
+                str_contains($upstreamType, 'text/html')
+                || str_contains($upstreamType, 'application/json')
+                || str_contains($upstreamType, 'text/plain')
+            ) {
+                $this->fail($download, 'Upstream returned a non-file response ('.$upstreamType.').', $ledger);
+
+                return;
+            }
+
             $body = $response->toPsrResponse()->getBody();
             $bytes = 0;
 
@@ -80,11 +95,31 @@ class StreamDownloadFileJob implements ShouldQueue
                 return;
             }
 
+            $firstChunkChecked = false;
             try {
                 while (! $body->eof()) {
                     $chunk = $body->read(1024 * 1024);
                     if ($chunk === '') {
                         continue;
+                    }
+                    // Fallback magic-byte sniff: some providers don't set a sane
+                    // Content-Type, so peek at the first bytes for HTML/JSON.
+                    if (! $firstChunkChecked) {
+                        $firstChunkChecked = true;
+                        $head = ltrim(substr($chunk, 0, 256));
+                        $lower = strtolower($head);
+                        if (
+                            str_starts_with($lower, '<!doctype html')
+                            || str_starts_with($lower, '<html')
+                            || str_starts_with($head, '{"')
+                            || str_starts_with($head, '{ "')
+                        ) {
+                            fclose($handle);
+                            @unlink($absolutePath);
+                            $this->fail($download, 'Upstream returned an HTML/JSON body instead of a file.', $ledger);
+
+                            return;
+                        }
                     }
                     $written = fwrite($handle, $chunk);
                     if ($written === false) {
@@ -94,7 +129,9 @@ class StreamDownloadFileJob implements ShouldQueue
                 }
                 fflush($handle);
             } finally {
-                fclose($handle);
+                if (is_resource($handle)) {
+                    fclose($handle);
+                }
             }
 
             // Sanity check: if upstream gave us nothing, treat it as a failure
