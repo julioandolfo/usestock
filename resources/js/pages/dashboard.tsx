@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
-import { formatBytes, formatNumber, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { formatBytes, formatDateTime, formatNumber, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { AlertCircle, CheckCircle2, Coins, Download, Eye, FileArchive, Loader2, Sparkles, TrendingUp, Zap } from 'lucide-react';
@@ -117,6 +117,18 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
         });
     }, []);
     useDownloadEvents(onEvent);
+
+    // Polling fallback: if any item is still in progress, refresh the server
+    // payload every few seconds. Guarantees the table converges even when
+    // Reverb isn't reachable from the browser (TLS issues, blocked ws, etc.).
+    const hasInFlight = useMemo(() => items.some((d) => isInProgress(d.status)), [items]);
+    useEffect(() => {
+        if (!hasInFlight) return;
+        const t = setInterval(() => {
+            router.reload({ only: ['recentDownloads', 'stats'] });
+        }, 5000);
+        return () => clearInterval(t);
+    }, [hasInFlight]);
 
     // Merge fresh recentDownloads from the server (e.g. after a router.post that
     // reloads the page partially) into local state so newly-queued items appear
@@ -387,6 +399,7 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                             <TableHead>Provedor</TableHead>
                                             <TableHead>Status</TableHead>
                                             <TableHead>Tamanho</TableHead>
+                                            <TableHead>Quando</TableHead>
                                             <TableHead></TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -409,6 +422,12 @@ export default function Dashboard({ stats, recentDownloads, providers, limits }:
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-xs">{formatBytes(d.file_size_bytes)}</TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">
+                                                    <div className="leading-tight">
+                                                        <p>Solicitado {formatDateTime(d.created_at)}</p>
+                                                        {d.ready_at && <p>Pronto {formatDateTime(d.ready_at)}</p>}
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell>
                                                     {d.status === 'ready' ? (
                                                         <a

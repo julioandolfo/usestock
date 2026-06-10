@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -139,7 +140,7 @@ class DownloadController extends Controller
                         'credits' => $provider ? $resolver->creditsFor($provider) : null,
                     ];
                 } catch (GetStocksException $e) {
-                    \Illuminate\Support\Facades\Log::warning('Preview failed', [
+                    Log::warning('Preview failed', [
                         'link' => $link,
                         'raw' => $e->getMessage(),
                     ]);
@@ -156,4 +157,3 @@ class DownloadController extends Controller
         return response()->json(['items' => $items]);
     }
 }
-

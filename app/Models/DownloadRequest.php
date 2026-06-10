@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\TextSanitiser;
+use App\Support\UpstreamErrorTranslator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -98,7 +100,7 @@ class DownloadRequest extends Model
             return $value;
         }
 
-        $translator = app(\App\Support\UpstreamErrorTranslator::class);
+        $translator = app(UpstreamErrorTranslator::class);
         $lower = mb_strtolower($value);
 
         // If the raw message references the upstream provider in any way,
@@ -120,12 +122,12 @@ class DownloadRequest extends Model
      */
     public function getItemNameAttribute(?string $value): ?string
     {
-        return \App\Support\TextSanitiser::fix($value);
+        return TextSanitiser::fix($value);
     }
 
     public function getFileNameAttribute(?string $value): ?string
     {
-        return \App\Support\TextSanitiser::fix($value);
+        return TextSanitiser::fix($value);
     }
 
     public function user(): BelongsTo

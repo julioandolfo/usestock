@@ -74,13 +74,15 @@ class FileServeController extends Controller
             return $this->errorResponse(410, 'Arquivo corrompido. Tente baixar novamente.');
         }
 
-        $filename = $download->file_name
+        // Upstream sometimes hands us a URL-encoded filename like
+        // "Make%20You%20Sweat.zip". Browsers refuse the Content-Disposition
+        // value (literal % is treated as the start of an RFC5987 escape),
+        // fall back to the URL's last segment ("file"), then sniff the body
+        // — which causes the download to be saved as "file.html" with the
+        // wrong content type. Decode it before building the header.
+        $rawName = $download->file_name
             ?: ($download->public_id.($download->file_extension ? '.'.$download->file_extension : ''));
-
-        $download->forceFill([
-            'served_count' => $download->served_count + 1,
-            'last_served_at' => now(),
-        ])->saveQuietly();
+        $filename = $this->sanitiseFilename($rawName);
 
         $response = new BinaryFileResponse($absolutePath, 200, [
             'Content-Type' => $this->guessContentType($download->file_extension, $absolutePath),
@@ -89,12 +91,36 @@ class FileServeController extends Controller
             'Cache-Control' => 'private, no-store',
         ]);
 
-        $response->setContentDisposition(
-            ResponseHeaderBag::DISPOSITION_ATTACHMENT,
-            $filename,
-            // Sanitised ASCII fallback for old browsers that can't parse RFC 5987.
-            $this->asciiFallback($filename),
-        );
+        // Symfony's setContentDisposition throws InvalidArgumentException if
+        // the ASCII fallback contains "%" (treated as the start of an RFC5987
+        // escape). A bad filename here MUST NOT bring down the whole serve —
+        // fall back to a safe generic name if anything goes wrong.
+        try {
+            $response->setContentDisposition(
+                ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+                $filename,
+                $this->asciiFallback($filename),
+            );
+        } catch (\InvalidArgumentException $e) {
+            Log::warning('FileServe: bad filename for Content-Disposition, using generic', [
+                'download_id' => $download->id,
+                'filename' => $filename,
+                'error' => $e->getMessage(),
+            ]);
+            $generic = 'download'.($download->file_extension ? '.'.$download->file_extension : '');
+            $response->setContentDisposition(
+                ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+                $generic,
+                $generic,
+            );
+        }
+
+        // Increment the counter only after the response is fully prepared, so
+        // a header-building exception above doesn't pollute the served_count.
+        $download->forceFill([
+            'served_count' => $download->served_count + 1,
+            'last_served_at' => now(),
+        ])->saveQuietly();
 
         return $response;
     }
@@ -110,9 +136,23 @@ class FileServeController extends Controller
         ]);
     }
 
+    private function sanitiseFilename(string $name): string
+    {
+        // urldecode handles "%20" / "%C3%A7" etc. rawurldecode handles "+".
+        $decoded = rawurldecode($name);
+        // Strip any directory components a malicious upstream might inject.
+        $decoded = basename(str_replace(['\\', '/'], '_', $decoded));
+        // Drop control chars but keep accented letters.
+        $decoded = preg_replace('/[\x00-\x1F\x7F]+/u', '', $decoded) ?? '';
+
+        return trim($decoded) !== '' ? trim($decoded) : 'download';
+    }
+
     private function asciiFallback(string $filename): string
     {
-        $sanitised = preg_replace('/[^\x20-\x7E]+/', '_', $filename) ?: 'download';
+        // Strip non-ASCII AND "%" — Symfony's makeDisposition rejects "%" in
+        // the fallback because it conflicts with the RFC5987 escape sequence.
+        $sanitised = preg_replace('/[^\x20-\x7E]+|%/', '_', $filename) ?: 'download';
 
         return trim($sanitised, '_') ?: 'download';
     }

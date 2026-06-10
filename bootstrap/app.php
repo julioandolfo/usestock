@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Http\Request;
 use Spatie\Permission\Middleware\RoleMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -38,11 +39,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Behind Coolify's Traefik proxy: trust every hop, so X-Forwarded-Proto
         // is honoured and Laravel generates https:// URLs / sets secure cookies
         // when the public-facing scheme is HTTPS.
-        $middleware->trustProxies(at: '*', headers: \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR
-            | \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST
-            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT
-            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
-            | \Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB);
+        $middleware->trustProxies(at: '*', headers: Request::HEADER_X_FORWARDED_FOR
+            | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT
+            | Request::HEADER_X_FORWARDED_PROTO
+            | Request::HEADER_X_FORWARDED_AWS_ELB);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
