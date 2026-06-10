@@ -9,11 +9,13 @@ use App\Services\Downloads\CreditLedger;
 use App\Services\GetStocks\GetStocksClient;
 use App\Services\GetStocks\GetStocksException;
 use App\Settings\GetStocksSettings;
+use App\Support\UpstreamErrorTranslator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Polls /api/v1/download-status on a delay loop until status=1 (ready),
@@ -74,7 +76,11 @@ class PollDownloadStatusJob implements ShouldQueue
                 'item_d_code' => $result['itemDCode'],
                 'upstream_download_link' => $result['itemDLink'] ?? null,
                 'item_name' => $result['itemName'] ?? $download->item_name,
-                'file_name' => $result['itemFilename'] ?? null,
+                // Upstream sometimes returns URL-encoded names ("Make%20You%20Sweat.zip");
+                // decode at the boundary so Content-Disposition never breaks downstream.
+                'file_name' => isset($result['itemFilename'])
+                    ? rawurldecode((string) $result['itemFilename'])
+                    : null,
                 'file_extension' => $result['itemExt'] ?? null,
                 'upstream_thumb_url' => $result['itemThumb'] ?? $download->upstream_thumb_url,
                 'upstream_response' => $result,
@@ -95,8 +101,15 @@ class PollDownloadStatusJob implements ShouldQueue
 
     private function fail(DownloadRequest $download, string $reason, CreditLedger $ledger): void
     {
+        $translator = app(UpstreamErrorTranslator::class);
+        Log::warning('Download polling failed', [
+            'download_id' => $download->id,
+            'public_id' => $download->public_id,
+            'raw_reason' => $reason,
+        ]);
+
         $download->status = DownloadRequest::STATUS_FAILED;
-        $download->failure_reason = $reason;
+        $download->failure_reason = $translator->humanize($reason);
         $download->save();
 
         if ($download->credits_charged > 0) {

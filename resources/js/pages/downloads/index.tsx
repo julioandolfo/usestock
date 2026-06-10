@@ -7,10 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
-import { formatBytes, formatDate, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { formatBytes, formatDate, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { Loader2 } from 'lucide-react';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/react';
-import { FormEventHandler, useCallback, useMemo, useState } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
+import { FormEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Downloads', href: '/downloads' }];
 
@@ -26,6 +27,8 @@ type Download = {
     failure_reason: string | null;
     ready_at: string | null;
     created_at: string;
+    served_count: number;
+    last_served_at: string | null;
 };
 
 type Props = {
@@ -39,11 +42,11 @@ export default function DownloadsIndex({ downloads }: Props) {
     const [bulkText, setBulkText] = useState('');
     const [items, setItems] = useState<Download[]>(downloads.data);
 
-    const { setData, post, processing, errors, reset } = useForm({
-        links: [] as string[],
-        is_premium: true as boolean,
-        zip: false as boolean,
-    });
+    const [isPremium, setIsPremium] = useState(true);
+    const [wantZip, setWantZip] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<{ links?: string }>({});
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
     const onEvent = useCallback((event: DownloadEvent) => {
         setItems((prev) => {
@@ -65,6 +68,20 @@ export default function DownloadsIndex({ downloads }: Props) {
     }, []);
     useDownloadEvents(onEvent);
 
+    // Sync `items` whenever the server re-renders with fresh recentDownloads.
+    useEffect(() => {
+        setItems((prev) => {
+            const byId = new Map(prev.map((p) => [p.public_id, p]));
+            const merged = downloads.data.map((fresh) => byId.get(fresh.public_id) ?? fresh);
+            for (const local of prev) {
+                if (!merged.find((d) => d.public_id === local.public_id)) {
+                    merged.push(local);
+                }
+            }
+            return merged;
+        });
+    }, [downloads.data]);
+
     const linkList = useMemo(
         () =>
             bulkText
@@ -77,20 +94,33 @@ export default function DownloadsIndex({ downloads }: Props) {
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (!linkList.length) return;
-        setData('links', linkList);
-        post(route('downloads.store'), {
-            preserveScroll: true,
-            onSuccess: () => {
-                setBulkText('');
-                reset('links');
+        setProcessing(true);
+        setErrors({});
+        setSuccessMsg(null);
+        const n = linkList.length;
+        router.post(
+            route('downloads.store'),
+            { links: linkList, is_premium: isPremium, zip: wantZip },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: (page) => {
+                    setBulkText('');
+                    const info = (page.props as { flash?: { lastSubmit?: { total: number; queued: number; reused: number } } }).flash?.lastSubmit;
+                    setSuccessMsg(buildSubmitMessage(info, n));
+                    setTimeout(() => setSuccessMsg(null), 8000);
+                    router.reload({ only: ['downloads'] });
+                },
+                onError: (errs) => setErrors(errs as { links?: string }),
+                onFinish: () => setProcessing(false),
             },
-        });
+        );
     };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Downloads" />
-            <div className="grid gap-6 p-4 lg:grid-cols-3">
+            <div className="grid gap-4 p-3 sm:gap-6 sm:p-4 lg:grid-cols-3">
                 <Card className="lg:col-span-1">
                     <CardHeader>
                         <CardTitle>Novo download</CardTitle>
@@ -100,6 +130,16 @@ export default function DownloadsIndex({ downloads }: Props) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
+                        {successMsg && (
+                            <div className="mb-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                                {successMsg}
+                            </div>
+                        )}
+                        {errors.links && (
+                            <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                {errors.links}
+                            </div>
+                        )}
                         <form onSubmit={submit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="links">Links</Label>
@@ -121,10 +161,7 @@ export default function DownloadsIndex({ downloads }: Props) {
                                     <p className="text-sm font-medium">Conteúdo premium</p>
                                     <p className="text-xs text-muted-foreground">Necessário para a maioria dos sites.</p>
                                 </div>
-                                <Switch
-                                    checked={true}
-                                    onCheckedChange={(v) => setData('is_premium', v)}
-                                />
+                                <Switch checked={isPremium} onCheckedChange={setIsPremium} />
                             </div>
 
                             <div className="flex items-center justify-between rounded-md border p-3">
@@ -132,7 +169,7 @@ export default function DownloadsIndex({ downloads }: Props) {
                                     <p className="text-sm font-medium">Gerar ZIP do lote</p>
                                     <p className="text-xs text-muted-foreground">Empacota tudo após os itens ficarem prontos.</p>
                                 </div>
-                                <Switch onCheckedChange={(v) => setData('zip', v)} />
+                                <Switch checked={wantZip} onCheckedChange={setWantZip} />
                             </div>
 
                             <Button type="submit" disabled={processing || !linkList.length} className="w-full">
@@ -173,7 +210,10 @@ export default function DownloadsIndex({ downloads }: Props) {
                                             </TableCell>
                                             <TableCell>{d.provider_slug || '—'}</TableCell>
                                             <TableCell>
-                                                <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'}>
+                                                <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'} className="gap-1.5">
+                                                    {isInProgress(d.status) && (
+                                                        <Loader2 className="size-3 animate-spin" />
+                                                    )}
                                                     {STATUS_LABELS[d.status] ?? d.status}
                                                 </Badge>
                                             </TableCell>
@@ -182,12 +222,28 @@ export default function DownloadsIndex({ downloads }: Props) {
                                                 {formatDate(d.ready_at ?? d.created_at)}
                                             </TableCell>
                                             <TableCell>
-                                                <Link
-                                                    href={route('downloads.show', d.public_id)}
-                                                    className="text-xs text-primary hover:underline"
-                                                >
-                                                    Detalhes
-                                                </Link>
+                                                <div className="flex items-center gap-3">
+                                                    {d.status === 'ready' && (
+                                                        <a
+                                                            href={route('library.file', d.public_id)}
+                                                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                                            download
+                                                        >
+                                                            Baixar
+                                                            {d.served_count > 0 && (
+                                                                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                                                                    {d.served_count}×
+                                                                </span>
+                                                            )}
+                                                        </a>
+                                                    )}
+                                                    <Link
+                                                        href={route('downloads.show', d.public_id)}
+                                                        className="text-xs text-muted-foreground hover:underline"
+                                                    >
+                                                        Detalhes
+                                                    </Link>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -199,4 +255,21 @@ export default function DownloadsIndex({ downloads }: Props) {
             </div>
         </AppLayout>
     );
+}
+
+function buildSubmitMessage(
+    info: { total: number; queued: number; reused: number } | undefined,
+    fallbackCount: number,
+): string {
+    if (!info) {
+        return `${fallbackCount} link${fallbackCount === 1 ? '' : 's'} enfileirado${fallbackCount === 1 ? '' : 's'}.`;
+    }
+    const { total, queued, reused } = info;
+    if (reused > 0 && queued === 0) {
+        return `${reused} arquivo${reused === 1 ? '' : 's'} já estava${reused === 1 ? '' : 'm'} na sua biblioteca — sem cobrança.`;
+    }
+    if (reused > 0 && queued > 0) {
+        return `${queued} item${queued === 1 ? '' : 'ns'} enfileirado${queued === 1 ? '' : 's'} · ${reused} reaproveitado${reused === 1 ? '' : 's'} sem cobrança.`;
+    }
+    return `${total} link${total === 1 ? '' : 's'} enfileirado${total === 1 ? '' : 's'}. O status aparece em tempo real.`;
 }

@@ -1,12 +1,16 @@
+import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber, formatPhoneMask } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Plus } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -35,6 +39,7 @@ type Props = {
 
 export default function UsersIndex({ users, filters }: Props) {
     const [q, setQ] = useState(filters.q ?? '');
+    const [createOpen, setCreateOpen] = useState(false);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
@@ -44,23 +49,34 @@ export default function UsersIndex({ users, filters }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Usuários" />
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                             <CardTitle>Usuários ({formatNumber(users.data.length)})</CardTitle>
-                            <form onSubmit={submit} className="flex gap-2">
-                                <Input
-                                    type="search"
-                                    placeholder="Buscar por nome/email…"
-                                    value={q}
-                                    onChange={(e) => setQ(e.target.value)}
-                                    className="w-64"
-                                />
-                                <Button type="submit" variant="outline">
-                                    Buscar
-                                </Button>
-                            </form>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <form onSubmit={submit} className="flex gap-2">
+                                    <Input
+                                        type="search"
+                                        placeholder="Buscar por nome/email…"
+                                        value={q}
+                                        onChange={(e) => setQ(e.target.value)}
+                                        className="w-48 sm:w-64"
+                                    />
+                                    <Button type="submit" variant="outline" size="sm">
+                                        Buscar
+                                    </Button>
+                                </form>
+                                <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button size="sm">
+                                            <Plus className="mr-2 size-4" />
+                                            Novo usuário
+                                        </Button>
+                                    </DialogTrigger>
+                                    <CreateUserDialog onSuccess={() => setCreateOpen(false)} />
+                                </Dialog>
+                            </div>
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -123,5 +139,139 @@ export default function UsersIndex({ users, filters }: Props) {
                 </Card>
             </div>
         </AppLayout>
+    );
+}
+
+function CreateUserDialog({ onSuccess }: { onSuccess: () => void }) {
+    const form = useForm({
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        role: 'user' as 'user' | 'admin',
+        initial_credits: 0,
+    });
+
+    const submit: FormEventHandler = (e) => {
+        e.preventDefault();
+        form.post(route('admin.users.store'), {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                onSuccess();
+            },
+        });
+    };
+
+    const generatePassword = () => {
+        const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+        let out = '';
+        for (let i = 0; i < 12; i++) {
+            out += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        form.setData('password', out);
+    };
+
+    return (
+        <DialogContent className="max-w-md">
+            <DialogHeader>
+                <DialogTitle>Criar novo usuário</DialogTitle>
+                <DialogDescription>
+                    A conta é criada já verificada e ativa. A senha pode ser compartilhada com o usuário para o primeiro login.
+                </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={submit} className="space-y-3">
+                <div>
+                    <Label htmlFor="cu-name">Nome</Label>
+                    <Input
+                        id="cu-name"
+                        value={form.data.name}
+                        onChange={(e) => form.setData('name', e.target.value)}
+                        required
+                    />
+                    <InputError message={form.errors.name} />
+                </div>
+
+                <div>
+                    <Label htmlFor="cu-email">E-mail</Label>
+                    <Input
+                        id="cu-email"
+                        type="email"
+                        value={form.data.email}
+                        onChange={(e) => form.setData('email', e.target.value)}
+                        required
+                    />
+                    <InputError message={form.errors.email} />
+                </div>
+
+                <div>
+                    <Label htmlFor="cu-phone">WhatsApp</Label>
+                    <Input
+                        id="cu-phone"
+                        type="tel"
+                        inputMode="tel"
+                        value={form.data.phone}
+                        onChange={(e) => form.setData('phone', formatPhoneMask(e.target.value))}
+                        placeholder="(35) 99180-3209"
+                    />
+                    <InputError message={form.errors.phone} />
+                </div>
+
+                <div>
+                    <div className="mb-1 flex items-center justify-between">
+                        <Label htmlFor="cu-password">Senha</Label>
+                        <button
+                            type="button"
+                            onClick={generatePassword}
+                            className="text-xs text-primary hover:underline"
+                        >
+                            Gerar
+                        </button>
+                    </div>
+                    <Input
+                        id="cu-password"
+                        type="text"
+                        value={form.data.password}
+                        onChange={(e) => form.setData('password', e.target.value)}
+                        placeholder="Mínimo 8 caracteres"
+                        required
+                    />
+                    <InputError message={form.errors.password} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <Label htmlFor="cu-role">Papel</Label>
+                        <select
+                            id="cu-role"
+                            value={form.data.role}
+                            onChange={(e) => form.setData('role', e.target.value as 'user' | 'admin')}
+                            className="h-10 w-full rounded-md border bg-background px-2 text-sm"
+                        >
+                            <option value="user">Usuário</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                        <InputError message={form.errors.role} />
+                    </div>
+                    <div>
+                        <Label htmlFor="cu-credits">Créditos iniciais</Label>
+                        <Input
+                            id="cu-credits"
+                            type="number"
+                            min={0}
+                            value={form.data.initial_credits}
+                            onChange={(e) => form.setData('initial_credits', parseInt(e.target.value || '0', 10))}
+                        />
+                        <InputError message={form.errors.initial_credits} />
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button type="submit" disabled={form.processing} className="w-full">
+                        {form.processing ? 'Criando…' : 'Criar usuário'}
+                    </Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
     );
 }

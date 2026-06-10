@@ -5,27 +5,206 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller;
 use App\Models\DownloadRequest;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 /**
- * Serves a previously-downloaded file to the owner via a signed URL.
- * The actual storage path is never exposed; we stream from the private disk.
+ * Serves a previously-downloaded file to its owner.
+ *
+ * Error paths intentionally return text/plain (not HTML) because this route
+ * is invoked through <a download>, and the browser saves whatever the
+ * response body is using the link's download attribute. Returning HTML on
+ * abort() would land in the user's Downloads folder as "file.html", which is
+ * a horrible UX. text/plain at least gets saved as "file.txt" with the
+ * actual error message inside.
  */
 class FileServeController extends Controller
 {
-    public function __invoke(Request $request, string $publicId): StreamedResponse
+    public function __invoke(Request $request, string $publicId): BinaryFileResponse|Response
     {
         $download = DownloadRequest::query()
             ->where('user_id', $request->user()->id)
             ->where('public_id', $publicId)
             ->firstOrFail();
 
-        abort_unless($download->isReady(), 410, 'File is no longer available.');
+        if (! $download->isReady()) {
+            return $this->errorResponse(410, 'Arquivo não está mais disponível.');
+        }
 
         $disk = Storage::disk($download->storage_disk ?: 'downloads');
-        abort_unless($disk->exists($download->storage_path), 404);
+        $relativePath = $download->storage_path;
 
-        return $disk->download($download->storage_path, $download->file_name ?? $publicId);
+        if (! $relativePath || ! $disk->exists($relativePath)) {
+            // Rich diagnostic so we can tell a cross-container volume issue
+            // (worker wrote the file, web can't see it) apart from a genuine
+            // deletion. Logs the host, the absolute path we looked at, whether
+            // the parent dir exists, and a sample of what IS in that dir.
+            $absolute = $relativePath ? $disk->path($relativePath) : null;
+            $dir = $absolute ? dirname($absolute) : null;
+            Log::warning('FileServe: file not found on this container', [
+                'download_id' => $download->id,
+                'public_id' => $download->public_id,
+                'hostname' => gethostname(),
+                'relative_path' => $relativePath,
+                'absolute_path' => $absolute,
+                'dir_exists' => $dir ? is_dir($dir) : null,
+                'dir_sample' => ($dir && is_dir($dir)) ? array_slice(array_values(array_diff(scandir($dir) ?: [], ['.', '..'])), 0, 10) : [],
+            ]);
+
+            // IMPORTANT: do NOT mutate the row to expired here. If the cause is
+            // a volume that isn't shared between worker and web (or a not-yet
+            // persistent volume), the file may actually still exist elsewhere
+            // and destroying the row would lose it permanently. Genuine TTL
+            // expiry is handled by CleanExpiredDownloadsJob. We just report.
+            return $this->errorResponse(404, 'Arquivo temporariamente indisponível. Se persistir, refaça o download.');
+        }
+
+        $absolutePath = $disk->path($relativePath);
+        $size = is_file($absolutePath) ? filesize($absolutePath) : 0;
+
+        if ($size === 0) {
+            Log::warning('FileServe: zero-byte file', [
+                'download_id' => $download->id,
+                'path' => $relativePath,
+            ]);
+
+            return $this->errorResponse(410, 'Arquivo corrompido. Tente baixar novamente.');
+        }
+
+        // Upstream sometimes hands us a URL-encoded filename like
+        // "Make%20You%20Sweat.zip". Browsers refuse the Content-Disposition
+        // value (literal % is treated as the start of an RFC5987 escape),
+        // fall back to the URL's last segment ("file"), then sniff the body
+        // — which causes the download to be saved as "file.html" with the
+        // wrong content type. Decode it before building the header.
+        $rawName = $download->file_name
+            ?: ($download->public_id.($download->file_extension ? '.'.$download->file_extension : ''));
+        $filename = $this->sanitiseFilename($rawName);
+
+        $response = new BinaryFileResponse($absolutePath, 200, [
+            'Content-Type' => $this->guessContentType($download->file_extension, $absolutePath),
+            'Content-Length' => (string) $size,
+            'X-Accel-Buffering' => 'no',
+            'Cache-Control' => 'private, no-store',
+        ]);
+
+        // Symfony's setContentDisposition throws InvalidArgumentException if
+        // the ASCII fallback contains "%" (treated as the start of an RFC5987
+        // escape). A bad filename here MUST NOT bring down the whole serve —
+        // fall back to a safe generic name if anything goes wrong.
+        try {
+            $response->setContentDisposition(
+                ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+                $filename,
+                $this->asciiFallback($filename),
+            );
+        } catch (\InvalidArgumentException $e) {
+            Log::warning('FileServe: bad filename for Content-Disposition, using generic', [
+                'download_id' => $download->id,
+                'filename' => $filename,
+                'error' => $e->getMessage(),
+            ]);
+            $generic = 'download'.($download->file_extension ? '.'.$download->file_extension : '');
+            $response->setContentDisposition(
+                ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+                $generic,
+                $generic,
+            );
+        }
+
+        // Increment the counter only after the response is fully prepared, so
+        // a header-building exception above doesn't pollute the served_count.
+        $download->forceFill([
+            'served_count' => $download->served_count + 1,
+            'last_served_at' => now(),
+        ])->saveQuietly();
+
+        return $response;
+    }
+
+    private function errorResponse(int $status, string $message): Response
+    {
+        return response($message, $status, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Cache-Control' => 'no-store',
+            // Tell the browser to display, not save — so the user sees the
+            // message instead of getting a mysterious "file.txt" in Downloads.
+            'Content-Disposition' => 'inline',
+        ]);
+    }
+
+    private function sanitiseFilename(string $name): string
+    {
+        // urldecode handles "%20" / "%C3%A7" etc. rawurldecode handles "+".
+        $decoded = rawurldecode($name);
+        // Strip any directory components a malicious upstream might inject.
+        $decoded = basename(str_replace(['\\', '/'], '_', $decoded));
+        // Drop control chars but keep accented letters.
+        $decoded = preg_replace('/[\x00-\x1F\x7F]+/u', '', $decoded) ?? '';
+
+        return trim($decoded) !== '' ? trim($decoded) : 'download';
+    }
+
+    private function asciiFallback(string $filename): string
+    {
+        // Strip non-ASCII AND "%" — Symfony's makeDisposition rejects "%" in
+        // the fallback because it conflicts with the RFC5987 escape sequence.
+        $sanitised = preg_replace('/[^\x20-\x7E]+|%/', '_', $filename) ?: 'download';
+
+        return trim($sanitised, '_') ?: 'download';
+    }
+
+    private function guessContentType(?string $ext, ?string $path = null): string
+    {
+        $mime = match (strtolower((string) $ext)) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            'svg' => 'image/svg+xml',
+            'tif', 'tiff' => 'image/tiff',
+            'bmp' => 'image/bmp',
+            'mp4', 'm4v' => 'video/mp4',
+            'webm' => 'video/webm',
+            'mov' => 'video/quicktime',
+            'avi' => 'video/x-msvideo',
+            'mkv' => 'video/x-matroska',
+            'mp3' => 'audio/mpeg',
+            'wav' => 'audio/wav',
+            'ogg' => 'audio/ogg',
+            'flac' => 'audio/flac',
+            'aac' => 'audio/aac',
+            'zip' => 'application/zip',
+            'rar' => 'application/vnd.rar',
+            '7z' => 'application/x-7z-compressed',
+            'tar' => 'application/x-tar',
+            'gz' => 'application/gzip',
+            'pdf' => 'application/pdf',
+            'eps' => 'application/postscript',
+            'ai' => 'application/postscript',
+            'ps' => 'application/postscript',
+            'psd' => 'image/vnd.adobe.photoshop',
+            'indd' => 'application/x-indesign',
+            'sketch' => 'application/octet-stream',
+            'fig' => 'application/octet-stream',
+            'xd' => 'application/octet-stream',
+            default => null,
+        };
+
+        if ($mime !== null) {
+            return $mime;
+        }
+
+        if ($path !== null && function_exists('mime_content_type')) {
+            $detected = @mime_content_type($path);
+            if ($detected) {
+                return $detected;
+            }
+        }
+
+        return 'application/octet-stream';
     }
 }

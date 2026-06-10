@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
+use App\Mail\CreditsCreditedMail;
 use App\Models\CreditTransaction;
 use App\Models\Payment;
 use App\Services\Downloads\CreditLedger;
@@ -10,6 +11,7 @@ use App\Settings\MercadoPagoSettings;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use MercadoPago\Client\Payment\PaymentClient;
 use MercadoPago\MercadoPagoConfig;
 
@@ -71,10 +73,23 @@ class MercadoPagoWebhookController extends Controller
                 user: $payment->user,
                 amount: $payment->credits_to_grant,
                 type: CreditTransaction::TYPE_PURCHASE,
-                description: "Pagamento MercadoPago {$payment->provider_payment_id}",
+                description: 'Pagamento online aprovado',
                 reference: $payment,
                 metadata: ['method' => $payment->method],
             );
+
+            // Notify the user that their purchase landed in the account.
+            try {
+                $user = $payment->user->fresh();
+                Mail::to($user->email)->send(new CreditsCreditedMail(
+                    user: $user,
+                    amount: $payment->credits_to_grant,
+                    balanceAfter: $user->credits_balance,
+                    reason: 'Compra de pacote (Pix/Cartão) aprovada',
+                ));
+            } catch (\Throwable $e) {
+                Log::warning('Purchase mail failed: '.$e->getMessage(), ['payment_id' => $payment->id]);
+            }
         }
 
         return response('ok', 200);

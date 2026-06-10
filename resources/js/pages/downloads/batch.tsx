@@ -27,6 +27,7 @@ type Item = {
     provider_slug: string | null;
     status: string;
     file_size_bytes: number | null;
+    served_count: number;
 };
 
 type Props = { batch: Batch; items: Item[] };
@@ -80,7 +81,9 @@ export default function BatchShow({ batch, items: initial }: Props) {
                         </p>
                         {batch.zip_requested && batch.zip_path && (
                             <Button asChild>
-                                <Link href={route('batches.zip', batch.public_id)}>Baixar ZIP do lote</Link>
+                                <a href={route('batches.zip', batch.public_id)} download>
+                                    Baixar ZIP do lote
+                                </a>
                             </Button>
                         )}
                     </CardContent>
@@ -114,12 +117,18 @@ export default function BatchShow({ batch, items: initial }: Props) {
                                         <TableCell>{formatBytes(d.file_size_bytes)}</TableCell>
                                         <TableCell>
                                             {d.status === 'ready' && (
-                                                <Link
+                                                <a
                                                     href={route('library.file', d.public_id)}
-                                                    className="text-xs text-primary hover:underline"
+                                                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                                    download
                                                 >
                                                     Baixar
-                                                </Link>
+                                                    {d.served_count > 0 && (
+                                                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                                                            {d.served_count}×
+                                                        </span>
+                                                    )}
+                                                </a>
                                             )}
                                         </TableCell>
                                     </TableRow>

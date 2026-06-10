@@ -9,6 +9,7 @@ use App\Services\Downloads\CreditLedger;
 use App\Services\GetStocks\GetStocksClient;
 use App\Services\GetStocks\GetStocksException;
 use App\Settings\GetStocksSettings;
+use App\Support\UpstreamErrorTranslator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -76,9 +77,7 @@ class ProcessDownloadJob implements ShouldBeUnique, ShouldQueue
                 }
             }
 
-            $webhook = $settings->use_webhook
-                ? URL::signedRoute('webhooks.getstocks', ['public_id' => $download->public_id])
-                : null;
+            $webhook = $this->resolveWebhookUrl($settings, $download);
 
             $result = $client->getLink(
                 link: $download->source_url,
@@ -117,10 +116,51 @@ class ProcessDownloadJob implements ShouldBeUnique, ShouldQueue
         event(new DownloadStatusChanged($download));
     }
 
+    /**
+     * Build the webhook URL for GetStocks IF the configured app URL is public + HTTPS.
+     * Returns null otherwise — in which case the PollDownloadStatusJob fallback handles
+     * the wait, so the download still completes even if webhooks are disabled.
+     *
+     * GetStocks rejects URLs that look like development setups (http, localhost, IPs,
+     * .test/.local TLDs) with a generic "The webhook format is invalid" error, so we
+     * pre-validate to avoid the upstream failure entirely.
+     */
+    private function resolveWebhookUrl(GetStocksSettings $settings, DownloadRequest $download): ?string
+    {
+        if (! $settings->use_webhook) {
+            return null;
+        }
+
+        $appUrl = (string) config('app.url');
+        $host = parse_url($appUrl, PHP_URL_HOST) ?: '';
+        $scheme = parse_url($appUrl, PHP_URL_SCHEME) ?: '';
+
+        $isDev =
+            $scheme !== 'https'
+            || $host === ''
+            || $host === 'localhost'
+            || str_ends_with($host, '.test')
+            || str_ends_with($host, '.local')
+            || filter_var($host, FILTER_VALIDATE_IP) !== false;
+
+        if ($isDev) {
+            return null;
+        }
+
+        return URL::signedRoute('webhooks.getstocks', ['public_id' => $download->public_id]);
+    }
+
     private function fail(DownloadRequest $download, string $reason, CreditLedger $ledger): void
     {
+        $translator = app(UpstreamErrorTranslator::class);
+        Log::warning('Download failed', [
+            'download_id' => $download->id,
+            'public_id' => $download->public_id,
+            'raw_reason' => $reason,
+        ]);
+
         $download->status = DownloadRequest::STATUS_FAILED;
-        $download->failure_reason = $reason;
+        $download->failure_reason = $translator->humanize($reason);
         $download->save();
 
         if ($download->credits_charged > 0) {

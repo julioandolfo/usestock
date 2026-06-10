@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
-import { formatBytes, formatDate, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { formatBytes, formatDate, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
+import { Loader2 } from 'lucide-react';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { useCallback, useState } from 'react';
@@ -21,6 +22,8 @@ type Download = {
     expires_at: string | null;
     upstream_thumb_url: string | null;
     credits_charged: number;
+    served_count: number;
+    last_served_at: string | null;
 };
 
 export default function DownloadShow({ download }: { download: Download }) {
@@ -50,12 +53,13 @@ export default function DownloadShow({ download }: { download: Download }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={state.item_name || `Download ${state.public_id}`} />
-            <div className="grid gap-4 p-4 lg:grid-cols-3">
+            <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader>
                         <div className="flex items-start justify-between gap-3">
                             <CardTitle className="truncate">{state.item_name || state.source_url}</CardTitle>
-                            <Badge variant={STATUS_VARIANTS[state.status] ?? 'secondary'}>
+                            <Badge variant={STATUS_VARIANTS[state.status] ?? 'secondary'} className="gap-1.5">
+                                {isInProgress(state.status) && <Loader2 className="size-3 animate-spin" />}
                                 {STATUS_LABELS[state.status] ?? state.status}
                             </Badge>
                         </div>
@@ -90,9 +94,24 @@ export default function DownloadShow({ download }: { download: Download }) {
                     </CardHeader>
                     <CardContent className="space-y-3">
                         {state.status === 'ready' ? (
-                            <Button asChild className="w-full">
-                                <Link href={route('library.file', state.public_id)}>Baixar arquivo</Link>
-                            </Button>
+                            <>
+                                <Button asChild className="w-full">
+                                    <a href={route('library.file', state.public_id)} download>
+                                        Baixar arquivo
+                                        {state.served_count > 0 && (
+                                            <span className="ml-2 rounded-full bg-primary-foreground/20 px-2 py-0.5 text-[10px] font-semibold tabular-nums">
+                                                {state.served_count}×
+                                            </span>
+                                        )}
+                                    </a>
+                                </Button>
+                                {state.served_count > 0 && (
+                                    <p className="text-center text-[10px] text-muted-foreground">
+                                        Você já baixou este arquivo {state.served_count}{' '}
+                                        {state.served_count === 1 ? 'vez' : 'vezes'}
+                                    </p>
+                                )}
+                            </>
                         ) : (
                             <p className="text-sm text-muted-foreground">
                                 Aguardando processamento. O botão de download aparece automaticamente.

@@ -20,8 +20,13 @@ use Spatie\Permission\Models\Role;
 /**
  * One-shot install wizard rendered on first boot.
  *
- * Configures admin credentials + GetStocks credentials in DB-backed settings,
+ * Configures admin credentials + GetStocks API token in DB-backed settings,
  * so the app can be deployed via Coolify without a manual .env step.
+ *
+ * The GetStocks /api/auth/login endpoint does NOT return the token in its
+ * response body (despite what their published docs claim) — it emails the
+ * token to the registered account. We therefore ask the admin to paste the
+ * token directly and validate it via /api/auth/profile.
  */
 class InstallController extends Controller
 {
@@ -43,23 +48,33 @@ class InstallController extends Controller
             'brand_name' => ['nullable', 'string', 'max:120'],
             'support_email' => ['nullable', 'email', 'max:160'],
             'getstocks_email' => ['required', 'email'],
-            'getstocks_password' => ['required', 'string'],
+            'getstocks_token' => ['required', 'string', 'min:20'],
+            // Password is kept optional for documentation/future re-auth flows.
+            'getstocks_password' => ['nullable', 'string'],
         ]);
 
-        // 1) Validate GetStocks credentials by logging in. Store token.
+        // 1) Persist the GetStocks credentials BEFORE calling the client so that
+        //    the client (which reads from settings) picks them up.
         $getstocks->email = $data['getstocks_email'];
-        $getstocks->password = $data['getstocks_password'];
+        $getstocks->token = $data['getstocks_token'];
+        if (! empty($data['getstocks_password'])) {
+            $getstocks->password = $data['getstocks_password'];
+        }
         $getstocks->save();
 
+        // 2) Validate the token by calling /api/auth/profile.
         try {
-            $client->refreshToken();
+            $client->profile();
         } catch (GetStocksException $e) {
+            // Roll back the saved token so the wizard stays open.
+            $getstocks->token = null;
+            $getstocks->save();
             throw ValidationException::withMessages([
-                'getstocks_email' => 'GetStocks login failed: '.$e->getMessage(),
+                'getstocks_token' => 'Token inválido ou expirado: '.$e->getMessage(),
             ]);
         }
 
-        // 2) Create admin user + role.
+        // 3) Create admin user + role.
         DB::transaction(function () use ($data, $general) {
             $adminRole = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
             Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
@@ -79,7 +94,7 @@ class InstallController extends Controller
             $general->save();
         });
 
-        // 3) Best-effort: trigger an initial provider sync in the background.
+        // 4) Best-effort: trigger an initial provider sync in the background.
         SyncProvidersJob::dispatch();
 
         return redirect()->route('login')->with('status', 'Instalação concluída. Faça login com sua conta de admin.');

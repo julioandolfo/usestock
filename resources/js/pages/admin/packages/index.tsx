@@ -57,7 +57,7 @@ export default function PackagesIndex({ packages }: { packages: Package[] }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Pacotes" />
-            <div className="grid gap-4 p-4 lg:grid-cols-3">
+            <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-3">
                 <Card className="lg:col-span-1">
                     <CardHeader>
                         <CardTitle>Novo pacote</CardTitle>

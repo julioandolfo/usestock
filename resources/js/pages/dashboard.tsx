@@ -1,35 +1,628 @@
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { useDownloadEvents, type DownloadEvent } from '@/hooks/use-download-events';
 import AppLayout from '@/layouts/app-layout';
+import { formatBytes, formatDateTime, formatNumber, isInProgress, STATUS_LABELS, STATUS_VARIANTS } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+import { AlertCircle, CheckCircle2, Coins, Download, Eye, FileArchive, Loader2, Sparkles, TrendingUp, Zap } from 'lucide-react';
+import { FormEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Dashboard',
-        href: '/dashboard',
-    },
-];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 
-export default function Dashboard() {
+type Stats = {
+    credits_balance: number;
+    library_count: number;
+    month_downloads: number;
+    total_downloads: number;
+};
+
+type Limits = { bulk_max_items: number; file_ttl_days: number; max_concurrent_per_user: number };
+
+type PreviewItem = {
+    link: string;
+    ok: boolean;
+    enabled?: boolean;
+    name?: string | null;
+    thumb?: string | null;
+    provider_name?: string | null;
+    type_label?: string | null;
+    is_premium?: boolean;
+    credits?: number | null;
+    error?: string;
+};
+
+type ProviderTypeRow = {
+    type: string;
+    kind: string;
+    kind_label: string;
+    resolution: string | null;
+    is_premium: boolean;
+    credits: number;
+};
+
+type ProviderCard = {
+    slug: string;
+    name: string;
+    host: string | null;
+    types: ProviderTypeRow[];
+};
+
+type Download = {
+    public_id: string;
+    source_url: string;
+    item_name: string | null;
+    provider_slug: string | null;
+    status: string;
+    file_name: string | null;
+    file_size_bytes: number | null;
+    failure_reason: string | null;
+    ready_at: string | null;
+    created_at: string;
+    upstream_thumb_url: string | null;
+    served_count: number;
+    last_served_at: string | null;
+};
+
+type Props = {
+    stats: Stats;
+    recentDownloads: Download[];
+    providers: ProviderCard[];
+    limits: Limits;
+};
+
+export default function Dashboard({ stats, recentDownloads, providers, limits }: Props) {
+    const [bulkText, setBulkText] = useState('');
+    const [items, setItems] = useState<Download[]>(recentDownloads);
+    const [balance] = useState(stats.credits_balance);
+
+    const [isPremium, setIsPremium] = useState(true);
+    const [wantZip, setWantZip] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<{ links?: string }>({});
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    const [previewing, setPreviewing] = useState(false);
+    const [previewItems, setPreviewItems] = useState<PreviewItem[] | null>(null);
+
+    const linkList = useMemo(
+        () =>
+            bulkText
+                .split(/\r?\n/)
+                .map((l) => l.trim())
+                .filter(Boolean),
+        [bulkText],
+    );
+
+    const onEvent = useCallback((event: DownloadEvent) => {
+        setItems((prev) => {
+            const idx = prev.findIndex((d) => d.public_id === event.id);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = {
+                ...next[idx],
+                status: event.status,
+                item_name: event.item_name ?? next[idx].item_name,
+                provider_slug: event.provider_slug ?? next[idx].provider_slug,
+                file_name: event.file_name ?? next[idx].file_name,
+                file_size_bytes: event.file_size_bytes ?? next[idx].file_size_bytes,
+                failure_reason: event.failure_reason ?? next[idx].failure_reason,
+                ready_at: event.ready_at ?? next[idx].ready_at,
+            };
+            return next;
+        });
+    }, []);
+    useDownloadEvents(onEvent);
+
+    // Polling fallback: if any item is still in progress, refresh the server
+    // payload every few seconds. Guarantees the table converges even when
+    // Reverb isn't reachable from the browser (TLS issues, blocked ws, etc.).
+    const hasInFlight = useMemo(() => items.some((d) => isInProgress(d.status)), [items]);
+    useEffect(() => {
+        if (!hasInFlight) return;
+        const t = setInterval(() => {
+            router.reload({ only: ['recentDownloads', 'stats'] });
+        }, 5000);
+        return () => clearInterval(t);
+    }, [hasInFlight]);
+
+    // Merge fresh recentDownloads from the server (e.g. after a router.post that
+    // reloads the page partially) into local state so newly-queued items appear
+    // immediately in the activity table without losing the realtime updates we
+    // already applied via Reverb.
+    useEffect(() => {
+        setItems((prev) => {
+            const byId = new Map(prev.map((p) => [p.public_id, p]));
+            const merged = recentDownloads.map((fresh) => byId.get(fresh.public_id) ?? fresh);
+            for (const local of prev) {
+                if (!merged.find((d) => d.public_id === local.public_id)) {
+                    merged.push(local);
+                }
+            }
+            return merged.slice(0, 8);
+        });
+    }, [recentDownloads]);
+
+    const fetchPreview = async () => {
+        if (!linkList.length || previewing) return;
+        setPreviewing(true);
+        setErrors({});
+        try {
+            const csrf = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+            const res = await fetch(route('downloads.preview'), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ links: linkList, is_premium: isPremium }),
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                setErrors({ links: body.message ?? 'Falha ao consultar os itens.' });
+                setPreviewItems(null);
+                return;
+            }
+            const data = (await res.json()) as { items: PreviewItem[] };
+            setPreviewItems(data.items);
+        } catch {
+            setErrors({ links: 'Falha de conexão ao consultar os itens.' });
+        } finally {
+            setPreviewing(false);
+        }
+    };
+
+    const submit: FormEventHandler = (e) => {
+        e.preventDefault();
+        if (!linkList.length) return;
+        setProcessing(true);
+        setErrors({});
+        setSuccessMsg(null);
+        const n = linkList.length;
+        router.post(
+            route('downloads.store'),
+            { links: linkList, is_premium: isPremium, zip: wantZip },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: (page) => {
+                    setBulkText('');
+                    setPreviewItems(null);
+                    const submitInfo = (page.props as { flash?: { lastSubmit?: { total: number; queued: number; reused: number } } }).flash?.lastSubmit;
+                    setSuccessMsg(buildSubmitMessage(submitInfo, n));
+                    setTimeout(() => setSuccessMsg(null), 8000);
+                    router.reload({ only: ['recentDownloads', 'stats'] });
+                },
+                onError: (errs) => setErrors(errs as { links?: string }),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    };
+
+    const lowestPremium = useMemo(() => {
+        const prices = providers.flatMap((p) => p.types.filter((t) => t.is_premium).map((t) => t.credits));
+        return prices.length ? Math.min(...prices) : null;
+    }, [providers]);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard" />
-            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
+
+            <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
+                {/* Welcome banner */}
+                <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary/90 to-primary/70 text-primary-foreground">
+                    <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:p-6">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-xs opacity-90 sm:text-sm">
+                                <Sparkles className="size-4" />
+                                Bem-vindo de volta
+                            </div>
+                            <h2 className="mt-1 text-lg font-bold sm:text-2xl">
+                                {formatNumber(balance)} crédito{balance === 1 ? '' : 's'} disponíve{balance === 1 ? 'l' : 'is'}
+                            </h2>
+                            <p className="mt-1 text-xs opacity-90 sm:text-sm">
+                                {lowestPremium
+                                    ? `A partir de ${lowestPremium} créd. por download · arquivos ficam ${limits.file_ttl_days} dias na biblioteca`
+                                    : 'Cole um link abaixo pra começar'}
+                            </p>
+                        </div>
+                        <Button asChild variant="secondary" size="sm" className="sm:size-lg">
+                            <Link href={route('billing.index')}>
+                                <Coins className="mr-2 size-4" />
+                                Comprar mais
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Stats cards */}
+                <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+                    <StatCard
+                        icon={<Coins className="size-4" />}
+                        label="Saldo de créditos"
+                        value={formatNumber(balance)}
+                        accent="primary"
+                    />
+                    <StatCard
+                        icon={<FileArchive className="size-4" />}
+                        label="Arquivos na biblioteca"
+                        value={formatNumber(stats.library_count)}
+                        accent="violet"
+                    />
+                    <StatCard
+                        icon={<TrendingUp className="size-4" />}
+                        label="Downloads neste mês"
+                        value={formatNumber(stats.month_downloads)}
+                        accent="emerald"
+                    />
+                    <StatCard
+                        icon={<Download className="size-4" />}
+                        label="Total de downloads"
+                        value={formatNumber(stats.total_downloads)}
+                        accent="amber"
+                    />
                 </div>
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 rounded-xl border md:min-h-min">
-                    <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+
+                {/* Quick download + recent */}
+                <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
+                    <Card className="lg:col-span-1">
+                        <CardHeader>
+                            <div className="flex items-center gap-2">
+                                <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                    <Zap className="size-4" />
+                                </div>
+                                <div>
+                                    <CardTitle>Download rápido</CardTitle>
+                                    <CardDescription>
+                                        Até {limits.bulk_max_items} links — um por linha
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {successMsg && (
+                                <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                                    <CheckCircle2 className="size-4" />
+                                    {successMsg}
+                                </div>
+                            )}
+                            {errors.links && (
+                                <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                    {errors.links}
+                                </div>
+                            )}
+                            <form onSubmit={submit} className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="quick-links">Links</Label>
+                                    <Textarea
+                                        id="quick-links"
+                                        rows={6}
+                                        value={bulkText}
+                                        onChange={(e) => setBulkText(e.target.value)}
+                                        placeholder={'https://www.shutterstock.com/...\nhttps://www.freepik.com/...'}
+                                    />
+                                    {errors.links && <p className="text-sm text-destructive">{errors.links}</p>}
+                                    <p className="text-xs text-muted-foreground">
+                                        {linkList.length} link{linkList.length === 1 ? '' : 's'} detectado{linkList.length === 1 ? '' : 's'}
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center justify-between rounded-md border p-3">
+                                    <div>
+                                        <p className="text-sm font-medium">Premium</p>
+                                        <p className="text-xs text-muted-foreground">Maioria dos bancos exige</p>
+                                    </div>
+                                    <Switch checked={isPremium} onCheckedChange={setIsPremium} />
+                                </div>
+
+                                <div className="flex items-center justify-between rounded-md border p-3">
+                                    <div>
+                                        <p className="text-sm font-medium">Empacotar em ZIP</p>
+                                        <p className="text-xs text-muted-foreground">Útil em lotes grandes</p>
+                                    </div>
+                                    <Switch checked={wantZip} onCheckedChange={setWantZip} />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={previewing || !linkList.length}
+                                        onClick={fetchPreview}
+                                    >
+                                        {previewing ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <Eye className="mr-2 size-4" />
+                                        )}
+                                        Conferir
+                                    </Button>
+                                    <Button type="submit" disabled={processing || !linkList.length}>
+                                        {processing ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <Zap className="mr-2 size-4" />
+                                        )}
+                                        {processing ? 'Enfileirando…' : 'Iniciar download'}
+                                    </Button>
+                                </div>
+                            </form>
+
+                            {previewItems && previewItems.length > 0 && (
+                                <div className="mt-4 space-y-2 rounded-md border bg-muted/30 p-2">
+                                    <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                        Pré-visualização
+                                    </p>
+                                    {previewItems.map((p) => (
+                                        <PreviewCard key={p.link} item={p} />
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="lg:col-span-2">
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Atividade recente</CardTitle>
+                                    <CardDescription>Atualiza ao vivo conforme cada item progride</CardDescription>
+                                </div>
+                                <Button asChild variant="ghost" size="sm">
+                                    <Link href={route('downloads.index')}>Ver tudo →</Link>
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {items.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-center">
+                                    <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                        <Download className="size-5" />
+                                    </div>
+                                    <p className="text-sm font-medium">Nenhum download ainda</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Cole um link no formulário ao lado para começar
+                                    </p>
+                                </div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Item</TableHead>
+                                            <TableHead>Provedor</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Tamanho</TableHead>
+                                            <TableHead>Quando</TableHead>
+                                            <TableHead></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {items.map((d) => (
+                                            <TableRow key={d.public_id}>
+                                                <TableCell className="max-w-xs">
+                                                    <p className="truncate font-medium">{d.item_name || d.source_url}</p>
+                                                    {d.failure_reason && (
+                                                        <p className="truncate text-xs text-destructive">{d.failure_reason}</p>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-xs capitalize">{d.provider_slug || '—'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={STATUS_VARIANTS[d.status] ?? 'secondary'} className="gap-1.5">
+                                                        {isInProgress(d.status) && (
+                                                            <Loader2 className="size-3 animate-spin" />
+                                                        )}
+                                                        {STATUS_LABELS[d.status] ?? d.status}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-xs">{formatBytes(d.file_size_bytes)}</TableCell>
+                                                <TableCell className="text-xs text-muted-foreground">
+                                                    <div className="leading-tight">
+                                                        <p>Solicitado {formatDateTime(d.created_at)}</p>
+                                                        {d.ready_at && <p>Pronto {formatDateTime(d.ready_at)}</p>}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {d.status === 'ready' ? (
+                                                        <a
+                                                            href={route('library.file', d.public_id)}
+                                                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                                            download
+                                                        >
+                                                            Baixar
+                                                            {d.served_count > 0 && (
+                                                                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                                                                    {d.served_count}×
+                                                                </span>
+                                                            )}
+                                                        </a>
+                                                    ) : (
+                                                        <Link
+                                                            href={route('downloads.show', d.public_id)}
+                                                            className="text-xs text-muted-foreground hover:underline"
+                                                        >
+                                                            Detalhes
+                                                        </Link>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
                 </div>
+
+                {/* Active providers + prices */}
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>Bancos ativos</CardTitle>
+                                <CardDescription>
+                                    {providers.length} provedor{providers.length === 1 ? '' : 'es'} disponíve{providers.length === 1 ? 'l' : 'is'} · custos em créditos por download
+                                </CardDescription>
+                            </div>
+                            <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="mr-1 size-3" />
+                                Online
+                            </Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {providers.length === 0 ? (
+                            <div className="py-10 text-center text-sm text-muted-foreground">
+                                Nenhum provedor sincronizado ainda. Peça pro admin clicar em "Sincronizar agora" no painel administrativo.
+                            </div>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                                {providers.map((p) => (
+                                    <div
+                                        key={p.slug}
+                                        className="rounded-lg border bg-background p-4 transition-colors hover:border-primary/40"
+                                    >
+                                        <div className="flex items-start justify-between">
+                                            <div className="min-w-0">
+                                                <p className="truncate font-medium capitalize">{p.name}</p>
+                                                <p className="truncate text-xs text-muted-foreground">{p.host}</p>
+                                            </div>
+                                            <span className="ml-2 inline-flex size-2 shrink-0 rounded-full bg-emerald-500" />
+                                        </div>
+                                        <div className="mt-3 space-y-1 text-xs">
+                                            {p.types.map((t) => (
+                                                <div
+                                                    key={t.type}
+                                                    className={`flex items-center justify-between rounded-md px-2 py-1.5 ${
+                                                        t.is_premium ? 'bg-primary/10 text-primary' : 'bg-muted/60'
+                                                    }`}
+                                                >
+                                                    <span>
+                                                        {t.kind_label}
+                                                        {t.is_premium && <span className="ml-1 text-[9px] opacity-70">PRO</span>}
+                                                    </span>
+                                                    <span className="font-semibold">{t.credits} créd.</span>
+                                                </div>
+                                            ))}
+                                            {p.types.length === 0 && (
+                                                <p className="text-muted-foreground">Nenhum tipo habilitado.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
         </AppLayout>
+    );
+}
+
+function StatCard({
+    icon,
+    label,
+    value,
+    accent,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    value: string;
+    accent: 'primary' | 'violet' | 'emerald' | 'amber';
+}) {
+    const tones: Record<string, string> = {
+        primary: 'bg-primary/10 text-primary',
+        violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+        emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+        amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    };
+    return (
+        <Card>
+            <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium text-muted-foreground sm:text-xs">{label}</p>
+                    <div className={`flex size-7 shrink-0 items-center justify-center rounded-md sm:size-8 ${tones[accent]}`}>{icon}</div>
+                </div>
+                <p className="mt-2 text-lg font-bold sm:mt-3 sm:text-2xl">{value}</p>
+            </CardContent>
+        </Card>
+    );
+}
+
+function buildSubmitMessage(
+    info: { total: number; queued: number; reused: number } | undefined,
+    fallbackCount: number,
+): string {
+    if (!info) {
+        return `${fallbackCount} link${fallbackCount === 1 ? '' : 's'} enviado${fallbackCount === 1 ? '' : 's'} para a fila.`;
+    }
+    const { total, queued, reused } = info;
+    if (reused > 0 && queued === 0) {
+        return `${reused} arquivo${reused === 1 ? '' : 's'} já estava${reused === 1 ? '' : 'm'} na sua biblioteca — sem cobrança.`;
+    }
+    if (reused > 0 && queued > 0) {
+        return `${queued} item${queued === 1 ? '' : 'ns'} enfileirado${queued === 1 ? '' : 's'} · ${reused} reaproveitado${reused === 1 ? '' : 's'} sem cobrança.`;
+    }
+    return `${total} link${total === 1 ? '' : 's'} enfileirado${total === 1 ? '' : 's'}. Acompanhe na atividade recente.`;
+}
+
+function PreviewCard({ item }: { item: PreviewItem }) {
+    if (!item.ok) {
+        return (
+            <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                <div className="min-w-0">
+                    <p className="truncate font-mono text-[10px] text-destructive/80">{item.link}</p>
+                    <p>{item.error ?? 'Falha ao consultar.'}</p>
+                </div>
+            </div>
+        );
+    }
+    return (
+        <div className="flex items-center gap-3 rounded border bg-background p-2">
+            <div className="size-16 shrink-0 overflow-hidden rounded bg-muted">
+                {item.thumb ? (
+                    <img src={item.thumb} alt={item.name ?? ''} className="size-full object-cover" />
+                ) : (
+                    <div className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                        sem prévia
+                    </div>
+                )}
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{item.name ?? item.link}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+                    {item.provider_name && (
+                        <span className="rounded-sm bg-muted px-1.5 py-0.5 font-medium capitalize">
+                            {item.provider_name}
+                        </span>
+                    )}
+                    {item.type_label && (
+                        <span className="rounded-sm bg-muted px-1.5 py-0.5">{item.type_label}</span>
+                    )}
+                    {item.is_premium && (
+                        <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-primary">Premium</span>
+                    )}
+                    {item.enabled === false && (
+                        <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 text-destructive">
+                            Tipo desabilitado
+                        </span>
+                    )}
+                </div>
+            </div>
+            <div className="shrink-0 text-right">
+                {item.credits !== null && item.credits !== undefined ? (
+                    <p className="text-sm font-semibold text-primary">{item.credits} créd.</p>
+                ) : (
+                    <p className="text-[10px] text-muted-foreground">custo a calcular</p>
+                )}
+            </div>
+        </div>
     );
 }

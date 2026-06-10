@@ -7,6 +7,7 @@ import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
 type InstallForm = {
+    [key: string]: string;
     admin_name: string;
     admin_email: string;
     admin_password: string;
@@ -14,6 +15,7 @@ type InstallForm = {
     brand_name: string;
     support_email: string;
     getstocks_email: string;
+    getstocks_token: string;
     getstocks_password: string;
 };
 
@@ -26,6 +28,7 @@ export default function InstallWizard() {
         brand_name: 'UseStock',
         support_email: '',
         getstocks_email: '',
+        getstocks_token: '',
         getstocks_password: '',
     });
 
@@ -41,8 +44,8 @@ export default function InstallWizard() {
                 <CardHeader>
                     <CardTitle>Bem-vindo ao UseStock</CardTitle>
                     <CardDescription>
-                        Configure seu admin e as credenciais da API do GetStocks para começar. Essas informações ficam
-                        salvas em banco e podem ser editadas depois no painel administrativo.
+                        Configure seu admin e o token da API do GetStocks para começar. As informações ficam salvas em
+                        banco (criptografadas onde sensível) e podem ser editadas depois no painel administrativo.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -122,12 +125,32 @@ export default function InstallWizard() {
 
                         <section className="space-y-4">
                             <h3 className="text-sm font-semibold text-foreground">GetStocks API</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Conta corporativa que será usada para baixar arquivos em nome dos seus usuários.
-                            </p>
+                            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
+                                <p className="font-medium">Como obter o token:</p>
+                                <ol className="mt-1 list-decimal space-y-1 pl-4">
+                                    <li>
+                                        Acesse{' '}
+                                        <a
+                                            href="https://getstocks.net/login"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline"
+                                        >
+                                            getstocks.net
+                                        </a>{' '}
+                                        e faça login na sua conta.
+                                    </li>
+                                    <li>
+                                        Vá em <strong>API / Developer</strong> no painel deles e copie seu access token
+                                        (ou confira o e-mail que eles enviam após o login).
+                                    </li>
+                                    <li>Cole o token aqui — vamos validar antes de prosseguir.</li>
+                                </ol>
+                            </div>
+
                             <div className="grid gap-4 md:grid-cols-2">
                                 <div className="space-y-2">
-                                    <Label htmlFor="getstocks_email">E-mail</Label>
+                                    <Label htmlFor="getstocks_email">E-mail da conta GetStocks</Label>
                                     <Input
                                         id="getstocks_email"
                                         type="email"
@@ -138,15 +161,27 @@ export default function InstallWizard() {
                                     <InputError message={errors.getstocks_email} />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="getstocks_password">Senha</Label>
+                                    <Label htmlFor="getstocks_password">Senha (opcional)</Label>
                                     <Input
                                         id="getstocks_password"
                                         type="password"
                                         value={data.getstocks_password}
                                         onChange={(e) => setData('getstocks_password', e.target.value)}
-                                        required
+                                        placeholder="Apenas se quiser guardar para futuras renovações"
                                     />
                                     <InputError message={errors.getstocks_password} />
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label htmlFor="getstocks_token">Access Token</Label>
+                                    <Input
+                                        id="getstocks_token"
+                                        type="password"
+                                        value={data.getstocks_token}
+                                        onChange={(e) => setData('getstocks_token', e.target.value)}
+                                        placeholder="Cole aqui o JWT do GetStocks"
+                                        required
+                                    />
+                                    <InputError message={errors.getstocks_token} />
                                 </div>
                             </div>
                         </section>

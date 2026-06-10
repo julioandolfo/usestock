@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber, formatPhoneMask } from '@/lib/format';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
+import { Minus, Plus } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 type Role = { id: number; name: string };
@@ -16,6 +17,7 @@ type User = {
     id: number;
     name: string;
     email: string;
+    phone: string | null;
     credits_balance: number;
     downloads_count: number;
     banned_at: string | null;
@@ -51,18 +53,43 @@ export default function UserShow({ user, transactions, downloads }: Props) {
 
     const credits = useForm({ amount: 0, description: '' });
     const ban = useForm({ reason: '' });
+    const edit = useForm({
+        name: user.name,
+        email: user.email,
+        phone: user.phone ? formatPhoneMask(user.phone) : '',
+        password: '',
+    });
 
     const isAdmin = user.roles.some((r) => r.name === 'admin');
 
-    const submitCredits: FormEventHandler = (e) => {
-        e.preventDefault();
+    const applyCredits = (direction: 1 | -1) => {
+        const magnitude = Math.abs(Number(credits.data.amount) || 0);
+        if (magnitude === 0) return;
+        credits.transform((d) => ({ ...d, amount: magnitude * direction }));
         credits.post(route('admin.users.credits', user.id), { preserveScroll: true });
+    };
+
+    const submitEdit: FormEventHandler = (e) => {
+        e.preventDefault();
+        edit.transform((d) => {
+            const payload: Record<string, string> = {
+                name: d.name,
+                email: d.email,
+                phone: d.phone, // backend normalises to digits
+            };
+            if (d.password) payload.password = d.password;
+            return payload;
+        });
+        edit.patch(route('admin.users.update', user.id), {
+            preserveScroll: true,
+            onSuccess: () => edit.setData('password', ''),
+        });
     };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={user.name} />
-            <div className="grid gap-4 p-4 lg:grid-cols-3">
+            <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-3">
                 <Card className="lg:col-span-1">
                     <CardHeader>
                         <CardTitle>{user.name}</CardTitle>
@@ -116,18 +143,86 @@ export default function UserShow({ user, transactions, downloads }: Props) {
 
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>Ajustar créditos</CardTitle>
-                        <CardDescription>Use valores positivos para creditar e negativos para debitar.</CardDescription>
+                        <CardTitle>Editar dados</CardTitle>
+                        <CardDescription>
+                            Atualize nome, e-mail ou redefina a senha. Deixe a senha em branco para manter a atual.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <form onSubmit={submitCredits} className="grid gap-3 md:grid-cols-3">
+                        <form onSubmit={submitEdit} className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-name">Nome</Label>
+                                <Input
+                                    id="edit-name"
+                                    value={edit.data.name}
+                                    onChange={(e) => edit.setData('name', e.target.value)}
+                                />
+                                <InputError message={edit.errors.name} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-email">E-mail</Label>
+                                <Input
+                                    id="edit-email"
+                                    type="email"
+                                    value={edit.data.email}
+                                    onChange={(e) => edit.setData('email', e.target.value)}
+                                />
+                                <InputError message={edit.errors.email} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-phone">WhatsApp</Label>
+                                <Input
+                                    id="edit-phone"
+                                    type="tel"
+                                    inputMode="tel"
+                                    value={edit.data.phone}
+                                    onChange={(e) => edit.setData('phone', formatPhoneMask(e.target.value))}
+                                    placeholder="(35) 99180-3209"
+                                />
+                                <InputError message={edit.errors.phone} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-password">Nova senha (opcional)</Label>
+                                <Input
+                                    id="edit-password"
+                                    type="text"
+                                    value={edit.data.password}
+                                    onChange={(e) => edit.setData('password', e.target.value)}
+                                    placeholder="Mínimo 8 caracteres"
+                                />
+                                <InputError message={edit.errors.password} />
+                            </div>
+                            <Button type="submit" disabled={edit.processing} className="md:col-span-2">
+                                {edit.processing ? 'Salvando…' : 'Salvar alterações'}
+                            </Button>
+                        </form>
+                    </CardContent>
+                </Card>
+
+                <Card className="lg:col-span-3">
+                    <CardHeader>
+                        <CardTitle>Ajustar créditos</CardTitle>
+                        <CardDescription>
+                            Saldo atual: <span className="font-semibold text-foreground">{formatNumber(user.credits_balance)}</span> créditos.
+                            Informe a quantidade e escolha adicionar ou remover.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                applyCredits(1);
+                            }}
+                            className="grid gap-3 md:grid-cols-3"
+                        >
                             <div className="space-y-2">
                                 <Label htmlFor="amount">Quantidade</Label>
                                 <Input
                                     id="amount"
                                     type="number"
+                                    min={1}
                                     value={credits.data.amount}
-                                    onChange={(e) => credits.setData('amount', parseInt(e.target.value || '0', 10))}
+                                    onChange={(e) => credits.setData('amount', Math.abs(parseInt(e.target.value || '0', 10)))}
                                 />
                                 <InputError message={credits.errors.amount} />
                             </div>
@@ -137,11 +232,29 @@ export default function UserShow({ user, transactions, downloads }: Props) {
                                     id="description"
                                     value={credits.data.description}
                                     onChange={(e) => credits.setData('description', e.target.value)}
+                                    placeholder="Ex.: bônus promocional, estorno, correção…"
                                 />
                             </div>
-                            <Button type="submit" disabled={credits.processing} className="md:col-span-3">
-                                Aplicar
-                            </Button>
+                            <div className="flex gap-2 md:col-span-3">
+                                <Button
+                                    type="submit"
+                                    disabled={credits.processing}
+                                    className="flex-1 bg-emerald-600 text-white hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                                >
+                                    <Plus className="mr-2 size-4" />
+                                    Adicionar créditos
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={credits.processing}
+                                    className="flex-1"
+                                    onClick={() => applyCredits(-1)}
+                                >
+                                    <Minus className="mr-2 size-4" />
+                                    Remover créditos
+                                </Button>
+                            </div>
                         </form>
                     </CardContent>
                 </Card>
