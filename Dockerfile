@@ -19,22 +19,12 @@ RUN npm run build
 # =====================================================================
 FROM php:8.4-fpm-alpine AS php-base
 
-RUN apk add --no-cache \
-        bash \
-        git \
-        curl \
-        zip \
-        unzip \
-        icu-dev \
-        libzip-dev \
-        oniguruma-dev \
-        postgresql-dev \
-        libpng-dev \
-        libjpeg-turbo-dev \
-        freetype-dev \
-        $PHPIZE_DEPS \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
+# mlocati's installer handles Alpine deps + non-interactive pecl prompts
+# (igbinary/lzf/zstd) that break plain `pecl install redis`.
+ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+
+RUN apk add --no-cache bash git curl zip unzip \
+    && install-php-extensions \
         bcmath \
         intl \
         opcache \
@@ -43,9 +33,7 @@ RUN apk add --no-cache \
         pgsql \
         zip \
         gd \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
-    && apk del $PHPIZE_DEPS \
+        redis \
     && rm -rf /tmp/* /var/cache/apk/*
 
 COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
