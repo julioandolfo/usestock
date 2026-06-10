@@ -84,11 +84,6 @@ class FileServeController extends Controller
             ?: ($download->public_id.($download->file_extension ? '.'.$download->file_extension : ''));
         $filename = $this->sanitiseFilename($rawName);
 
-        $download->forceFill([
-            'served_count' => $download->served_count + 1,
-            'last_served_at' => now(),
-        ])->saveQuietly();
-
         $response = new BinaryFileResponse($absolutePath, 200, [
             'Content-Type' => $this->guessContentType($download->file_extension, $absolutePath),
             'Content-Length' => (string) $size,
@@ -96,12 +91,36 @@ class FileServeController extends Controller
             'Cache-Control' => 'private, no-store',
         ]);
 
-        $response->setContentDisposition(
-            ResponseHeaderBag::DISPOSITION_ATTACHMENT,
-            $filename,
-            // Sanitised ASCII fallback for old browsers that can't parse RFC 5987.
-            $this->asciiFallback($filename),
-        );
+        // Symfony's setContentDisposition throws InvalidArgumentException if
+        // the ASCII fallback contains "%" (treated as the start of an RFC5987
+        // escape). A bad filename here MUST NOT bring down the whole serve —
+        // fall back to a safe generic name if anything goes wrong.
+        try {
+            $response->setContentDisposition(
+                ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+                $filename,
+                $this->asciiFallback($filename),
+            );
+        } catch (\InvalidArgumentException $e) {
+            Log::warning('FileServe: bad filename for Content-Disposition, using generic', [
+                'download_id' => $download->id,
+                'filename' => $filename,
+                'error' => $e->getMessage(),
+            ]);
+            $generic = 'download'.($download->file_extension ? '.'.$download->file_extension : '');
+            $response->setContentDisposition(
+                ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+                $generic,
+                $generic,
+            );
+        }
+
+        // Increment the counter only after the response is fully prepared, so
+        // a header-building exception above doesn't pollute the served_count.
+        $download->forceFill([
+            'served_count' => $download->served_count + 1,
+            'last_served_at' => now(),
+        ])->saveQuietly();
 
         return $response;
     }
@@ -131,7 +150,9 @@ class FileServeController extends Controller
 
     private function asciiFallback(string $filename): string
     {
-        $sanitised = preg_replace('/[^\x20-\x7E]+/', '_', $filename) ?: 'download';
+        // Strip non-ASCII AND "%" — Symfony's makeDisposition rejects "%" in
+        // the fallback because it conflicts with the RFC5987 escape sequence.
+        $sanitised = preg_replace('/[^\x20-\x7E]+|%/', '_', $filename) ?: 'download';
 
         return trim($sanitised, '_') ?: 'download';
     }
