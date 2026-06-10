@@ -74,7 +74,11 @@ class PollDownloadStatusJob implements ShouldQueue
                 'item_d_code' => $result['itemDCode'],
                 'upstream_download_link' => $result['itemDLink'] ?? null,
                 'item_name' => $result['itemName'] ?? $download->item_name,
-                'file_name' => $result['itemFilename'] ?? null,
+                // Upstream sometimes returns URL-encoded names ("Make%20You%20Sweat.zip");
+                // decode at the boundary so Content-Disposition never breaks downstream.
+                'file_name' => isset($result['itemFilename'])
+                    ? rawurldecode((string) $result['itemFilename'])
+                    : null,
                 'file_extension' => $result['itemExt'] ?? null,
                 'upstream_thumb_url' => $result['itemThumb'] ?? $download->upstream_thumb_url,
                 'upstream_response' => $result,

@@ -23,6 +23,22 @@ export function formatDate(value: string | null | undefined): string {
     return new Date(value).toLocaleString('pt-BR');
 }
 
+export function formatTime(value: string | null | undefined): string {
+    if (!value) return '—';
+    return new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+export function formatDateTime(value: string | null | undefined): string {
+    if (!value) return '—';
+    const d = new Date(value);
+    const today = new Date();
+    const sameDay = d.toDateString() === today.toDateString();
+    if (sameDay) {
+        return `hoje ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 /**
  * Brazilian phone mask. Accepts whatever the user types and returns a
  * formatted view limited to 11 digits.
