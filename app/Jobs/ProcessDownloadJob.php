@@ -9,6 +9,7 @@ use App\Services\Downloads\CreditLedger;
 use App\Services\GetStocks\GetStocksClient;
 use App\Services\GetStocks\GetStocksException;
 use App\Settings\GetStocksSettings;
+use App\Support\UpstreamErrorTranslator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -151,8 +152,8 @@ class ProcessDownloadJob implements ShouldBeUnique, ShouldQueue
 
     private function fail(DownloadRequest $download, string $reason, CreditLedger $ledger): void
     {
-        $translator = app(\App\Support\UpstreamErrorTranslator::class);
-        \Illuminate\Support\Facades\Log::warning('Download failed', [
+        $translator = app(UpstreamErrorTranslator::class);
+        Log::warning('Download failed', [
             'download_id' => $download->id,
             'public_id' => $download->public_id,
             'raw_reason' => $reason,

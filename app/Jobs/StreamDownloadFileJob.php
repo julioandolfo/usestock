@@ -8,11 +8,14 @@ use App\Models\DownloadRequest;
 use App\Services\Downloads\CreditLedger;
 use App\Services\GetStocks\GetStocksClient;
 use App\Settings\DownloadSettings;
+use App\Support\UpstreamErrorTranslator;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -178,7 +181,7 @@ class StreamDownloadFileJob implements ShouldQueue
             // the file. If FileServeController later logs a "not found" for the
             // same relative path on a different host, that's a smoking gun for
             // a volume that isn't shared between worker and web containers.
-            \Illuminate\Support\Facades\Log::info('Download stored', [
+            Log::info('Download stored', [
                 'download_id' => $download->id,
                 'public_id' => $download->public_id,
                 'hostname' => gethostname(),
@@ -198,8 +201,8 @@ class StreamDownloadFileJob implements ShouldQueue
 
     private function fail(DownloadRequest $download, string $reason, CreditLedger $ledger): void
     {
-        $translator = app(\App\Support\UpstreamErrorTranslator::class);
-        \Illuminate\Support\Facades\Log::warning('Download stream failed', [
+        $translator = app(UpstreamErrorTranslator::class);
+        Log::warning('Download stream failed', [
             'download_id' => $download->id,
             'public_id' => $download->public_id,
             'raw_reason' => $reason,
@@ -281,7 +284,7 @@ class StreamDownloadFileJob implements ShouldQueue
      * the disk root traversable, so PHP-FPM (www-data) can serve a file that
      * the queue worker may have written as root.
      */
-    private function makeReadable(\Illuminate\Contracts\Filesystem\Filesystem $disk, string $absoluteFile): void
+    private function makeReadable(Filesystem $disk, string $absoluteFile): void
     {
         @chmod($absoluteFile, 0644);
 
@@ -316,7 +319,7 @@ class StreamDownloadFileJob implements ShouldQueue
      * original raw video is removed.
      */
     private function wrapInZip(
-        \Illuminate\Contracts\Filesystem\Filesystem $disk,
+        Filesystem $disk,
         string $sourceAbsolute,
         string $sourceRelative,
         string $originalName,
@@ -331,7 +334,7 @@ class StreamDownloadFileJob implements ShouldQueue
 
         $zip = new \ZipArchive;
         if ($zip->open($absoluteZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            \Illuminate\Support\Facades\Log::warning('Failed to open ZipArchive for video wrap', [
+            Log::warning('Failed to open ZipArchive for video wrap', [
                 'source' => $sourceRelative,
                 'target' => $relativeZip,
             ]);
@@ -349,7 +352,7 @@ class StreamDownloadFileJob implements ShouldQueue
 
         // Verify the zip was written before deleting the original.
         if (! file_exists($absoluteZip) || filesize($absoluteZip) === 0) {
-            \Illuminate\Support\Facades\Log::warning('Generated zip is empty, keeping raw file', [
+            Log::warning('Generated zip is empty, keeping raw file', [
                 'source' => $sourceRelative,
             ]);
 

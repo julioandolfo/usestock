@@ -9,11 +9,13 @@ use App\Services\Downloads\CreditLedger;
 use App\Services\GetStocks\GetStocksClient;
 use App\Services\GetStocks\GetStocksException;
 use App\Settings\GetStocksSettings;
+use App\Support\UpstreamErrorTranslator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Polls /api/v1/download-status on a delay loop until status=1 (ready),
@@ -99,8 +101,8 @@ class PollDownloadStatusJob implements ShouldQueue
 
     private function fail(DownloadRequest $download, string $reason, CreditLedger $ledger): void
     {
-        $translator = app(\App\Support\UpstreamErrorTranslator::class);
-        \Illuminate\Support\Facades\Log::warning('Download polling failed', [
+        $translator = app(UpstreamErrorTranslator::class);
+        Log::warning('Download polling failed', [
             'download_id' => $download->id,
             'public_id' => $download->public_id,
             'raw_reason' => $reason,

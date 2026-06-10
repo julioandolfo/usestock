@@ -18,7 +18,6 @@ use App\Http\Controllers\User\PaymentController;
 use App\Http\Controllers\Webhooks\GetStocksWebhookController;
 use App\Http\Controllers\Webhooks\MercadoPagoWebhookController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 // -------------------------------------------------------------------
 // Public / pre-install
