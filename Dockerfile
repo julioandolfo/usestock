@@ -17,24 +17,32 @@ RUN npm run build
 # Shared by `vendor` and `runtime` so Composer resolves against the same
 # platform the app will actually run on.
 # =====================================================================
-FROM php:8.4-fpm-alpine AS php-base
+# Pinned to a specific PHP patch tag so `docker build --pull` (Coolify's
+# default) can't silently swap in a base image that breaks the extension
+# install step.
+FROM php:8.4.13-fpm-alpine3.22 AS php-base
 
 # mlocati's installer handles Alpine deps + non-interactive pecl prompts
-# (igbinary/lzf/zstd) that break plain `pecl install redis`.
-ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+# (igbinary/lzf/zstd) that break plain `pecl install redis`. Pinned to a
+# known-good release so a bad upstream `latest` can't take our deploy down.
+ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/download/2.9.34/install-php-extensions /usr/local/bin/
 
-RUN apk add --no-cache bash git curl zip unzip \
-    && install-php-extensions \
-        bcmath \
-        intl \
-        opcache \
-        pcntl \
-        pdo_pgsql \
-        pgsql \
-        zip \
-        gd \
-        redis \
-    && rm -rf /tmp/* /var/cache/apk/*
+# Base OS packages first — cheap layer, changes rarely.
+RUN apk add --no-cache bash git curl zip unzip
+
+# Split the extension install per extension so a future failure points at
+# exactly which one broke (Coolify's build log only shows the failing RUN).
+RUN install-php-extensions bcmath
+RUN install-php-extensions intl
+RUN install-php-extensions opcache
+RUN install-php-extensions pcntl
+RUN install-php-extensions pdo_pgsql
+RUN install-php-extensions pgsql
+RUN install-php-extensions zip
+RUN install-php-extensions gd
+RUN install-php-extensions redis
+
+RUN rm -rf /tmp/* /var/cache/apk/*
 
 COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
 
