@@ -166,10 +166,21 @@ services:
     # from the Coolify UI failed because ${SERVICE_PASSWORD_REDIS} may contain
     # $, !, quotes, or spaces that break either compose's variable expansion,
     # the exec-form argv, or the healthcheck's argv escaping.
+    #
+    # AOF disabled. This Redis is used strictly for cache / sessions / queue,
+    # all of which are recreatable state. AOF adds no value here AND made the
+    # container crash-loop the moment an incremental AOF file got a partial
+    # write (which happens the instant a redeploy kills the container mid-
+    # fsync). RDB snapshots on the default schedule are enough for warm
+    # restarts.
+    #
+    # stop_grace_period gives Redis time to flush an RDB on shutdown so the
+    # snapshot on disk stays consistent across redeploys.
+    stop_grace_period: 30s
     command:
       - "redis-server"
       - "--appendonly"
-      - "yes"
+      - "no"
       - "--maxmemory-policy"
       - "allkeys-lru"
     volumes:
