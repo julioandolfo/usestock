@@ -157,20 +157,23 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    # REDISCLI_AUTH is read automatically by redis-cli, avoiding the
-    # exec-form healthcheck argv escape problems with special chars in
-    # ${SERVICE_PASSWORD_REDIS} (e.g. "$", "!", quotes) that were leaving
-    # the container "unhealthy" and blocking every dependent service.
+    # BOTH the command and the healthcheck must see the SAME password. If we
+    # let compose interpolate ${SERVICE_PASSWORD_REDIS} straight into a list
+    # command (exec form), any shell-hostile char in the Coolify-managed
+    # password ($, !, quotes, spaces) produces a malformed argv — redis-server
+    # ends up with a *different* password than what redis-cli is using, and
+    # the healthcheck NOAUTHs forever.
+    #
+    # Fix: wrap in `sh -c` so the shell inside the container expands
+    # $REDIS_PASSWORD safely (quoted), matching what REDISCLI_AUTH gives to
+    # redis-cli. Interpolation happens once, at runtime, with proper quoting.
     environment:
+      REDIS_PASSWORD: "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
       REDISCLI_AUTH: "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
     command:
-      - "redis-server"
-      - "--requirepass"
-      - "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
-      - "--appendonly"
-      - "yes"
-      - "--maxmemory-policy"
-      - "allkeys-lru"
+      - "sh"
+      - "-c"
+      - 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --maxmemory-policy allkeys-lru'
     volumes:
       - redis_data:/data
     healthcheck:
