@@ -6,8 +6,9 @@
 #   - SERVICE_FQDN_APP_80     -> public domain bound to the `app` service
 # Only secrets need to be filled in Coolify UI:
 #   - SERVICE_PASSWORD_POSTGRES
-#   - SERVICE_PASSWORD_REDIS
+#   - SERVICE_PASSWORD_REVERB
 #   - APP_KEY  (optional — auto-generated on first boot otherwise)
+# Redis has no password (only reachable from the private compose network).
 # Everything else has sane defaults baked-in.
 #
 # ⚠️  PERSISTENT STORAGE — IMPORTANT
@@ -41,7 +42,10 @@ x-app-env: &app-env
 
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
-  REDIS_PASSWORD: "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
+  # Redis lives on the private Docker network — Coolify doesn't publish it,
+  # so no password is required. Leaving REDIS_PASSWORD empty makes Laravel /
+  # Predis skip AUTH, which matches an unauthenticated redis-server.
+  REDIS_PASSWORD: ""
   REDIS_CLIENT: "predis"
 
   CACHE_STORE: "redis"
@@ -55,7 +59,7 @@ x-app-env: &app-env
   BROADCAST_CONNECTION: "reverb"
   REVERB_APP_ID: "usestock"
   REVERB_APP_KEY: "usestock-public-key"
-  REVERB_APP_SECRET: "${SERVICE_PASSWORD_REVERB:-${SERVICE_PASSWORD_REDIS}}"
+  REVERB_APP_SECRET: "${SERVICE_PASSWORD_REVERB:?set SERVICE_PASSWORD_REVERB in Coolify}"
   REVERB_HOST: "reverb"
   REVERB_PORT: "8080"
   REVERB_SCHEME: "http"
@@ -157,31 +161,25 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    # BOTH the command and the healthcheck must see the SAME password. If we
-    # let compose interpolate ${SERVICE_PASSWORD_REDIS} straight into a list
-    # command (exec form), any shell-hostile char in the Coolify-managed
-    # password ($, !, quotes, spaces) produces a malformed argv — redis-server
-    # ends up with a *different* password than what redis-cli is using, and
-    # the healthcheck NOAUTHs forever.
-    #
-    # Fix: wrap in `sh -c` so the shell inside the container expands
-    # $REDIS_PASSWORD safely (quoted), matching what REDISCLI_AUTH gives to
-    # redis-cli. Interpolation happens once, at runtime, with proper quoting.
-    environment:
-      REDIS_PASSWORD: "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
-      REDISCLI_AUTH: "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
+    # No requirepass — the service is only reachable from other containers on
+    # the private compose network. Every previous attempt to pass a password
+    # from the Coolify UI failed because ${SERVICE_PASSWORD_REDIS} may contain
+    # $, !, quotes, or spaces that break either compose's variable expansion,
+    # the exec-form argv, or the healthcheck's argv escaping.
     command:
-      - "sh"
-      - "-c"
-      - 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --maxmemory-policy allkeys-lru'
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -h 127.0.0.1 ping | grep -q PONG"]
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
       interval: 10s
       timeout: 3s
       retries: 10
-      start_period: 10s
+      start_period: 5s
     expose:
       - "6379"
 
