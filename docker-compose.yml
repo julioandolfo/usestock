@@ -157,6 +157,12 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # REDISCLI_AUTH is read automatically by redis-cli, avoiding the
+    # exec-form healthcheck argv escape problems with special chars in
+    # ${SERVICE_PASSWORD_REDIS} (e.g. "$", "!", quotes) that were leaving
+    # the container "unhealthy" and blocking every dependent service.
+    environment:
+      REDISCLI_AUTH: "${SERVICE_PASSWORD_REDIS:?set SERVICE_PASSWORD_REDIS in Coolify}"
     command:
       - "redis-server"
       - "--requirepass"
@@ -168,10 +174,11 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${SERVICE_PASSWORD_REDIS}", "PING"]
+      test: ["CMD-SHELL", "redis-cli -h 127.0.0.1 ping | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 10
+      start_period: 10s
     expose:
       - "6379"
 
